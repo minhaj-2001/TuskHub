@@ -1,3 +1,4 @@
+// backend/routes/project.js
 import express from "express";
 import authenticateUser from "../middleware/auth-middleware.js";
 import {
@@ -11,7 +12,8 @@ import {
   deleteProjectStage,
   createStageConnection,
   getProjectStageConnections,
-  getProjectYears
+  getProjectYears,
+  updateProjectStatus  // Add this import
 } from "../controllers/project.js";
 
 const router = express.Router();
@@ -24,6 +26,7 @@ router.get("/all-projects", getAllProjects);
 router.get("/project-years", getProjectYears);
 router.get("/:id", getProjectById);
 router.put("/:id", updateProject);
+router.patch("/:id/status", updateProjectStatus); // Add this route for status updates
 router.delete("/delete-project/:id", deleteProject);
 router.post("/:projectId/stages", addStageToProject);
 router.put("/:projectId/stages/:stageId", updateProjectStage);

@@ -1,4 +1,3 @@
-// frontend/app/components/projects/ConnectionLine.tsx
 import React from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,21 +6,30 @@ import { type StageConnectionEntry } from "@/lib/schema";
 interface ConnectionLineProps {
   connection: StageConnectionEntry;
   onRemove: (connectionId: string) => void;
+  position: {
+    x: number;
+    y: number;
+  };
 }
 
-export const ConnectionLine: React.FC<ConnectionLineProps> = ({ connection, onRemove }) => {
+export const ConnectionLine: React.FC<ConnectionLineProps> = ({ 
+  connection, 
+  onRemove,
+  position
+}) => {
   return (
-    <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-20">
-      {/* Remove connection button */}
+    <div 
+      className="absolute pointer-events-auto z-30" 
+      style={{
+        left: position.x,
+        top: position.y,
+        transform: 'translate(-50%, -50%)'
+      }}
+    >
       <Button
         variant="outline"
         size="sm"
-        className="absolute pointer-events-auto z-30 bg-white shadow-md"
-        style={{
-          left: '50%',
-          top: '50%',
-          transform: 'translate(-50%, -50%)'
-        }}
+        className="bg-white shadow-md hover:bg-red-50 hover:text-red-600 transition-colors"
         onClick={(e) => {
           e.stopPropagation();
           onRemove(connection._id);

@@ -204,7 +204,58 @@ export const getProjectById = async (req, res) => {
   }
 };
 
+
+
+// Add this function to handle project status updates
+export const updateProjectStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const userId = req.user._id;
+    const userRole = req.user.role;
+    
+    console.log("Updating project status:", { id, status }); // Debug log
+    
+    // Check if user has permission to update this project
+    const project = await Project.findById(id);
+    if (!project) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+    
+    // Only managers can update projects, and only their own projects
+    if (userRole !== "manager" || project.owner.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    
+    // Validate status
+    const validStatuses = ['Pending', 'Ongoing', 'Completed', 'Archived'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
+    
+    // Update project status
+    project.status = status;
+    await project.save();
+    
+    // Format date to YYYY-MM-DD for frontend in local timezone
+    const formattedProject = {
+      ...project.toObject(),
+      created_at: formatDateToLocal(project.created_at)
+    };
+    
+    res.status(200).json(formattedProject);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error updating project status", error });
+  }
+};
+
+
+
 // Update a project
+// backend/controllers/project.js
+// Update the updateProject function to handle status updates
+
 export const updateProject = async (req, res) => {
   const { id } = req.params;
   const { project_name, description, status, created_at } = req.body;
@@ -299,7 +350,82 @@ export const deleteProject = async (req, res) => {
   }
 };
 
-// // Add a stage to a project
+
+// Add a helper function to update project status based on stages
+// const updateProjectStatusBasedOnStages = async (projectId) => {
+//   try {
+//     // Get all stages for the project
+//     const projectStages = await ProjectStage.find({ project: projectId });
+    
+//     if (projectStages.length === 0) {
+//       // If no stages, set status to Pending
+//       await Project.findByIdAndUpdate(projectId, { status: "Pending" });
+//       return;
+//     }
+    
+//     // Check if all stages are completed
+//     const allCompleted = projectStages.every(stage => stage.status === 'Completed');
+    
+//     // Check if any stage is ongoing
+//     const anyOngoing = projectStages.some(stage => stage.status === 'Ongoing');
+    
+//     let newStatus;
+//     if (allCompleted) {
+//       newStatus = "Completed";
+//     } else if (anyOngoing) {
+//       newStatus = "Ongoing";
+//     } else {
+//       newStatus = "Pending";
+//     }
+    
+//     await Project.findByIdAndUpdate(projectId, { status: newStatus });
+//   } catch (error) {
+//     console.error("Error updating project status:", error);
+//   }
+// };
+
+const updateProjectStatusBasedOnStages = async (projectId) => {
+  try {
+    // Get all stages for the project
+    const projectStages = await ProjectStage.find({ project: projectId });
+    
+    if (projectStages.length === 0) {
+      // If no stages, set status to Pending
+      await Project.findByIdAndUpdate(projectId, { status: "Pending" });
+      return;
+    }
+    
+    // Check if any stage is ongoing
+    const anyOngoing = projectStages.some(stage => stage.status === 'Ongoing');
+    
+    // Check if all stages are completed
+    const allCompleted = projectStages.every(stage => stage.status === 'Completed');
+    
+    let newStatus;
+    if (anyOngoing) {
+      newStatus = "Ongoing";
+    } else if (allCompleted) {
+      // Keep the current status if all stages are completed
+      // Don't automatically change to "Completed"
+      const project = await Project.findById(projectId);
+      newStatus = project.status;
+    } else {
+      newStatus = "Pending";
+    }
+    
+    // Only update if the status is different
+    const project = await Project.findById(projectId);
+    if (project.status !== newStatus) {
+      await Project.findByIdAndUpdate(projectId, { status: newStatus });
+    }
+  } catch (error) {
+    console.error("Error updating project status:", error);
+  }
+};
+
+
+
+// Update the addStageToProject function
 // export const addStageToProject = async (req, res) => {
 //   try {
 //     const { projectId } = req.params;
@@ -329,8 +455,9 @@ export const deleteProject = async (req, res) => {
 //       project: projectId,
 //       stage: stageId,
 //       status,
-//       start_date: status === 'Ongoing' ? createLocalDate(start_date) : undefined,
-//       completion_date: status === 'Completed' ? createLocalDate(completion_date) : undefined,
+//       // Save dates based on status
+//       start_date: (status === 'Ongoing' || status === 'Completed') && start_date ? createLocalDate(start_date) : undefined,
+//       completion_date: status === 'Completed' && completion_date ? createLocalDate(completion_date) : undefined,
 //       order
 //     });
     
@@ -339,6 +466,9 @@ export const deleteProject = async (req, res) => {
 //     // Add stage to project
 //     project.stages.push(newProjectStage._id);
 //     await project.save();
+    
+//     // Update project status based on stages
+//     await updateProjectStatusBasedOnStages(projectId);
     
 //     // Populate stage details
 //     const populatedStage = await ProjectStage.findById(newProjectStage._id)
@@ -358,149 +488,10 @@ export const deleteProject = async (req, res) => {
 //   }
 // };
 
-// // Update a project stage
-// export const updateProjectStage = async (req, res) => {
-//   try {
-//     const { projectId, stageId } = req.params;
-//     const { status, start_date, completion_date } = req.body;
-//     const userId = req.user._id;
-//     const userRole = req.user.role;
-    
-//     // Check if user has permission to update stages in this project
-//     const project = await Project.findById(projectId);
-//     if (!project) {
-//       return res.status(404).json({ message: "Project not found" });
-//     }
-    
-//     // Only managers can update stages in projects, and only their own projects
-//     if (userRole !== "manager" || project.owner.toString() !== userId.toString()) {
-//       return res.status(403).json({ message: "Access denied" });
-//     }
-    
-//     const projectStage = await ProjectStage.findOne({ 
-//       _id: stageId, 
-//       project: projectId 
-//     });
-    
-//     if (!projectStage) {
-//       return res.status(404).json({ message: "Project stage not found" });
-//     }
-    
-//     // Update fields
-//     if (status) projectStage.status = status;
-//     if (start_date) projectStage.start_date = createLocalDate(start_date);
-//     if (completion_date) projectStage.completion_date = createLocalDate(completion_date);
-    
-//     await projectStage.save();
-    
-//     // Populate stage details
-//     const populatedStage = await ProjectStage.findById(projectStage._id)
-//       .populate('stage');
-    
-//     // Format dates
-//     const formattedStage = {
-//       ...populatedStage.toObject(),
-//       start_date: formatDateToLocal(populatedStage.start_date),
-//       completion_date: formatDateToLocal(populatedStage.completion_date)
-//     };
-    
-//     res.status(200).json(formattedStage);
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({ message: "Error updating project stage", error });
-//   }
-// };
-
-// // Delete a project stage
-// export const deleteProjectStage = async (req, res) => {
-//   try {
-//     const { projectId, stageId } = req.params;
-//     const userId = req.user._id;
-//     const userRole = req.user.role;
-    
-//     // Check if user has permission to delete stages from this project
-//     const project = await Project.findById(projectId);
-//     if (!project) {
-//       return res.status(404).json({ message: "Project not found" });
-//     }
-    
-//     // Only managers can delete stages from projects, and only their own projects
-//     if (userRole !== "manager" || project.owner.toString() !== userId.toString()) {
-//       return res.status(403).json({ message: "Access denied" });
-//     }
-    
-//     const projectStage = await ProjectStage.findOne({ 
-//       _id: stageId, 
-//       project: projectId 
-//     });
-    
-//     if (!projectStage) {
-//       return res.status(404).json({ message: "Project stage not found" });
-//     }
-    
-//     // Delete all connections related to this stage
-//     await StageConnection.deleteMany({ 
-//       $or: [
-//         { from_stage: stageId },
-//         { to_stage: stageId }
-//       ]
-//     });
-    
-//     // Remove stage from project
-//     await Project.findByIdAndUpdate(projectId, {
-//       $pull: { stages: stageId }
-//     });
-    
-//     // Delete the stage
-//     await ProjectStage.findByIdAndDelete(stageId);
-    
-//     res.status(200).json({ message: "Project stage deleted successfully" });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({ message: "Error deleting project stage", error });
-//   }
-// };
 
 
 
-
-
-
-
-
-// Add a new function to update project status based on stages
-// Add a helper function to update project status based on stages
-const updateProjectStatusBasedOnStages = async (projectId) => {
-  try {
-    // Get all stages for the project
-    const projectStages = await ProjectStage.find({ project: projectId });
-    
-    if (projectStages.length === 0) {
-      // If no stages, set status to Pending
-      await Project.findByIdAndUpdate(projectId, { status: "Pending" });
-      return;
-    }
-    
-    // Check if all stages are completed
-    const allCompleted = projectStages.every(stage => stage.status === 'Completed');
-    
-    // Check if any stage is ongoing
-    const anyOngoing = projectStages.some(stage => stage.status === 'Ongoing');
-    
-    let newStatus;
-    if (allCompleted) {
-      newStatus = "Completed";
-    } else if (anyOngoing) {
-      newStatus = "Ongoing";
-    } else {
-      newStatus = "Pending";
-    }
-    
-    await Project.findByIdAndUpdate(projectId, { status: newStatus });
-  } catch (error) {
-    console.error("Error updating project status:", error);
-  }
-};
+// backend/controllers/project.js
 
 // Update the addStageToProject function
 export const addStageToProject = async (req, res) => {
@@ -564,6 +555,79 @@ export const addStageToProject = async (req, res) => {
     res.status(500).json({ message: "Error adding stage to project", error });
   }
 };
+
+
+
+
+// Update the updateProjectStage function
+// export const updateProjectStage = async (req, res) => {
+//   try {
+//     const { projectId, stageId } = req.params;
+//     const { status, start_date, completion_date } = req.body;
+//     const userId = req.user._id;
+//     const userRole = req.user.role;
+    
+//     // Check if user has permission to update stages in this project
+//     const project = await Project.findById(projectId);
+//     if (!project) {
+//       return res.status(404).json({ message: "Project not found" });
+//     }
+    
+//     // Only managers can update stages in projects, and only their own projects
+//     if (userRole !== "manager" || project.owner.toString() !== userId.toString()) {
+//       return res.status(403).json({ message: "Access denied" });
+//     }
+    
+//     const projectStage = await ProjectStage.findOne({ 
+//       _id: stageId, 
+//       project: projectId 
+//     });
+    
+//     if (!projectStage) {
+//       return res.status(404).json({ message: "Project stage not found" });
+//     }
+    
+//     // Update fields
+//     if (status) projectStage.status = status;
+    
+//     // Update dates based on status
+//     if (status === 'Ongoing') {
+//       if (start_date) projectStage.start_date = createLocalDate(start_date);
+//       // Clear completion date when changing to ongoing
+//       projectStage.completion_date = undefined;
+//     } else if (status === 'Completed') {
+//       // For completed status, both dates are required
+//       if (start_date) projectStage.start_date = createLocalDate(start_date);
+//       if (completion_date) projectStage.completion_date = createLocalDate(completion_date);
+//     }
+    
+//     await projectStage.save();
+    
+//     // Update project status based on stages
+//     await updateProjectStatusBasedOnStages(projectId);
+    
+//     // Populate stage details
+//     const populatedStage = await ProjectStage.findById(projectStage._id)
+//       .populate('stage');
+    
+//     // Format dates
+//     const formattedStage = {
+//       ...populatedStage.toObject(),
+//       start_date: formatDateToLocal(populatedStage.start_date),
+//       completion_date: formatDateToLocal(populatedStage.completion_date)
+//     };
+    
+//     res.status(200).json(formattedStage);
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ message: "Error updating project stage", error });
+//   }
+// };
+
+
+
+
+// backend/controllers/project.js
 
 // Update the updateProjectStage function
 export const updateProjectStage = async (req, res) => {
@@ -630,6 +694,69 @@ export const updateProjectStage = async (req, res) => {
   }
 };
 
+
+// Update the deleteProjectStage function
+// export const deleteProjectStage = async (req, res) => {
+//   try {
+//     const { projectId, stageId } = req.params;
+//     const userId = req.user._id;
+//     const userRole = req.user.role;
+    
+//     // Check if user has permission to delete stages from this project
+//     const project = await Project.findById(projectId);
+//     if (!project) {
+//       return res.status(404).json({ message: "Project not found" });
+//     }
+    
+//     // Only managers can delete stages from projects, and only their own projects
+//     if (userRole !== "manager" || project.owner.toString() !== userId.toString()) {
+//       return res.status(403).json({ message: "Access denied" });
+//     }
+    
+//     const projectStage = await ProjectStage.findOne({ 
+//       _id: stageId, 
+//       project: projectId 
+//     });
+    
+//     if (!projectStage) {
+//       return res.status(404).json({ message: "Project stage not found" });
+//     }
+    
+//     // Delete all connections related to this stage
+//     await StageConnection.deleteMany({ 
+//       $or: [
+//         { from_stage: stageId },
+//         { to_stage: stageId }
+//       ]
+//     });
+    
+//     // Remove stage from project
+//     await Project.findByIdAndUpdate(projectId, {
+//       $pull: { stages: stageId }
+//     });
+    
+//     // Delete the stage
+//     await ProjectStage.findByIdAndDelete(stageId);
+    
+//     // Update project status based on remaining stages
+//     await updateProjectStatusBasedOnStages(projectId);
+    
+//     res.status(200).json({ message: "Project stage deleted successfully" });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ message: "Error deleting project stage", error });
+//   }
+// };
+
+
+
+
+
+
+
+
+// backend/controllers/project.js
+
 // Update the deleteProjectStage function
 export const deleteProjectStage = async (req, res) => {
   try {
@@ -682,7 +809,6 @@ export const deleteProjectStage = async (req, res) => {
     res.status(500).json({ message: "Error deleting project stage", error });
   }
 };
-
 
 
 

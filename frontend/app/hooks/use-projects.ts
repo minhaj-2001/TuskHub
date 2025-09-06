@@ -1,3 +1,4 @@
+// frontend/app/hooks/use-projects.ts
 import { useState, useEffect, useCallback } from "react";
 import { type ProjectEntry, projectSchema } from "@/lib/schema";
 import { z } from "zod";
@@ -112,6 +113,29 @@ export const useProjects = () => {
     }
   }, [fetchProjects]);
   
+  // Add function to update project status
+  const updateProjectStatus = useCallback(async (id: string, status: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/projects/${id}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        throw new Error("Failed to update project status.");
+      }
+      await fetchProjects();
+      return true;
+    } catch (err) {
+      console.error("Error updating project status:", err);
+      setError("Failed to update project status. Please try again.");
+      return false;
+    }
+  }, [fetchProjects]);
+  
   const deleteProject = useCallback(async (id: string) => {
     try {
       const res = await fetch(`${API_BASE_URL}/projects/delete-project/${id}`, {
@@ -141,6 +165,7 @@ export const useProjects = () => {
     error,
     createProject,
     updateProject,
+    updateProjectStatus,  // Add this to the return object
     deleteProject,
     fetchProjects,
     fetchProjectYears,
