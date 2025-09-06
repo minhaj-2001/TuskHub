@@ -119,11 +119,29 @@ WorkStageTracker is a comprehensive project management application designed to s
    cd WorkStageTracker
 
 
-1. **Backend Setup**
+2. **Backend Setup**
    ```bash
    cd backend
-npm install
+   npm install
 
+3. **Start Backend Server**
+   ```bash
+   npm run dev
+
+4. **Start Frontend Development Server**
+   ```bash
+   npm run dev
+
+5. **Backend Environment Variables (.env)**
+   ```bash
+   MONGODB_URI=mongodb://localhost:27017/workstagetracker
+   JWT_SECRET=your_super_secure_jwt_secret_key_here
+   EMAIL_USER=your_email@gmail.com
+   EMAIL_PASS=your_app_specific_password
+   FRONTEND_URL=http://localhost:5173
+   ARCJET_KEY=your_arcjet_api_key
+   PORT=5000
+   NODE_ENV=development
 
 
 
