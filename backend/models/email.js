@@ -25,21 +25,3 @@ const emailSchema = new Schema(
 const Email = mongoose.model("Email", emailSchema);
 
 export default Email;
-
-
-
-
-
-
-
-
-
-// import mongoose from "mongoose";
-
-// const emailSchema = new mongoose.Schema({
-//   name: { type: String, required: true },
-//   email: { type: String, required: true, unique: true },
-// }, { timestamps: true });
-
-// const Email = mongoose.model("Email", emailSchema);
-// export default Email;
