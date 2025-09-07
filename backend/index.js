@@ -9,13 +9,12 @@ import routes from "./routes/index.js";
 dotenv.config();
 
 const app = express();
-
 // Improved CORS configuration for multiple origins
 const allowedOrigins = [
   process.env.FRONTEND_URL, // Production frontend (Vercel)
   "http://localhost:5173", // Local development
   "http://localhost:3000", // Alternative local port
-  "https://workstagetracker-frontend.vercel.app" // Explicit production URL
+  "https://work-stage-tracker-final.vercel.app" // Explicit production URL
 ].filter(Boolean); // Remove any undefined values
 
 const corsOptions = {
