@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { type EmailEntry, emailSchema } from "@/lib/schema"; // Import schema and type
 import { z } from "zod";
 
-const API_BASE_URL = "http://localhost:5000/api-v1/emails";
+const API_BASE_URL = import.meta.env.VITE_API_URL ||"http://localhost:5000/api-v1";
 
 // A custom hook to manage all email-related data and logic
 export const useEmails = () => {
@@ -15,7 +15,7 @@ export const useEmails = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/all-emails`, {
+      const res = await fetch(`${API_BASE_URL}/emails/all-emails`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
@@ -36,7 +36,7 @@ export const useEmails = () => {
   // Function to add a new email
   const addEmail = async (newEmail: z.infer<typeof emailSchema>) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/add-email`, {
+      const res = await fetch(`${API_BASE_URL}/emails/add-email`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -58,7 +58,7 @@ export const useEmails = () => {
   // Function to update an existing email
   const updateEmail = async (id: string, updatedEmail: z.infer<typeof emailSchema>) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/update-email/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/emails/update-email/${id}`, {
         method: "PUT",
         headers: { 
           "Content-Type": "application/json",
@@ -79,7 +79,7 @@ export const useEmails = () => {
   // Function to delete an email
   const deleteEmail = async (id: string) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/delete-email/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/emails/delete-email/${id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,

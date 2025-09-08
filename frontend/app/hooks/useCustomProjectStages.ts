@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { type ProjectStageEntry } from "@/lib/schema";
 
-const API_BASE_URL = "http://localhost:5000/api-v1";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api-v1";
 
 export const useCustomProjectStages = (projectId: string | null) => {
   const [customStages, setCustomStages] = useState<ProjectStageEntry[]>([]);

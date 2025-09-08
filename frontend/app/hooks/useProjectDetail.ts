@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { type ProjectEntry, type ProjectStageEntry, type StageEntry, type StageConnectionEntry } from "@/lib/schema";
 
-const API_BASE_URL = "http://localhost:5000/api-v1";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api-v1";
 
 export const useProjectDetail = (projectId: string | null) => {
   const [project, setProject] = useState<ProjectEntry | null>(null);

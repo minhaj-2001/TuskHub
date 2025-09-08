@@ -123,10 +123,9 @@ const handleUpdateStage = (stageId: string, status: 'Ongoing' | 'Completed', sta
 
   // Add this function to handle project status update
 const handleMarkProjectCompleted = async () => {
-  if (!project || !canEditProject) return;
-  
+  if (!project || !canEditProject) return;    
   try {
-    const response = await fetch(`http://localhost:5000/api-v1/projects/${project._id}`, {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/projects/${project._id}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -200,7 +199,7 @@ const handleMarkProjectCompleted = async () => {
     if (!stageToUpdate) return;
     
     try {
-      const response = await fetch(`http://localhost:5000/api-v1/stages/update-stage/${stageToUpdate._id}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/stages/update-stage/${stageToUpdate._id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
