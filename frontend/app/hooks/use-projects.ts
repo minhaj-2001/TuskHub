@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { type ProjectEntry, projectSchema } from "@/lib/schema";
 import { z } from "zod";
 
-const API_BASE_URL = "http://localhost:5000/api-v1";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api-v1";
 
 export const useProjects = () => {
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
