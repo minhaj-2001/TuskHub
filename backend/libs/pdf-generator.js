@@ -7,7 +7,7 @@ import os from 'os';
 export const generateProjectPDF = async (projectData) => {
   try {
     console.log("Generating PDF for project:", projectData.project_name);
-    
+        
     // Create a temporary HTML file for the PDF content
     const htmlContent = `
       <!DOCTYPE html>
@@ -202,22 +202,52 @@ export const generateProjectPDF = async (projectData) => {
       </html>
     `;
 
+ 
     // Create a temporary file
     const tempDir = os.tmpdir();
     const fileName = `project-${projectData._id}-${Date.now()}.pdf`;
     const filePath = path.join(tempDir, fileName);
-
     console.log("Generating PDF at path:", filePath);
-
-    // Launch Puppeteer with error handling
-    try {
-    const browser = await puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath,
-      headless: chromium.headless,
-    });
     
+    // Launch Puppeteer with Render-specific configuration
+    let browser;
+    try {
+      // Common Chromium paths in Render
+      const possiblePaths = [
+        '/usr/bin/chromium-browser',
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium'
+      ];
+      
+      let executablePath = null;
+      for (const path of possiblePaths) {
+        if (fs.existsSync(path)) {
+          executablePath = path;
+          break;
+        }
+      }
+      
+      const puppeteerOptions = {
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu',
+          '--single-process'
+        ]
+      };
+      
+      if (executablePath) {
+        puppeteerOptions.executablePath = executablePath;
+        console.log("Using Chromium at:", executablePath);
+      }
+      
+      browser = await puppeteer.launch(puppeteerOptions);
       
       const page = await browser.newPage();
       await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
