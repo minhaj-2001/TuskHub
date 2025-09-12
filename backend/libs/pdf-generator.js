@@ -201,26 +201,44 @@ export const generateProjectPDF = async (projectData) => {
       </body>
       </html>
     `;
-
+    
     // Create a temporary file
     const tempDir = os.tmpdir();
     const fileName = `project-${projectData._id}-${Date.now()}.pdf`;
     const filePath = path.join(tempDir, fileName);
-
     console.log("Generating PDF at path:", filePath);
-
-    // Launch Puppeteer with error handling
+    
+    // Launch Puppeteer with configuration for serverless environments
     let browser;
     try {
-      browser = await puppeteer.launch({
+      // Configuration for serverless environments
+      const puppeteerOptions = {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage', // Avoid shared memory issues
+          '--disable-accelerated-2d-canvas', // Avoid canvas issues
+          '--no-first-run', // Skip first run setup
+          '--no-zygote', // Disable zygote process
+          '--disable-gpu', // Disable GPU hardware acceleration
+          '--single-process', // Run in a single process
+        ],
+        timeout: 60000, // Increase timeout
+      };
+      
+      // Try to launch Puppeteer
+      browser = await puppeteer.launch(puppeteerOptions);
       
       const page = await browser.newPage();
-      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
       
-      // Generate PDF
+      // Set content with additional error handling
+      await page.setContent(htmlContent, { 
+        waitUntil: 'networkidle0',
+        timeout: 30000 // Increase timeout for setContent
+      });
+      
+      // Generate PDF with error handling
       await page.pdf({
         path: filePath,
         format: 'A4',
@@ -230,7 +248,8 @@ export const generateProjectPDF = async (projectData) => {
           right: '20mm',
           bottom: '20mm',
           left: '20mm'
-        }
+        },
+        timeout: 60000 // Increase timeout for PDF generation
       });
       
       console.log("PDF generated successfully");

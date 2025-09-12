@@ -104,6 +104,8 @@ export const deleteEmail = async (req, res) => {
 };
 
 // Share project details via email with PDF attachment
+// backend/controllers/email-controller.js
+// Share project details via email with PDF attachment
 export const shareProjectDetails = async (req, res) => {
   try {
     const { projectId, emailIds } = req.body;
@@ -151,7 +153,10 @@ export const shareProjectDetails = async (req, res) => {
       console.log("PDF generated successfully:", pdfResult.fileName);
     } catch (pdfError) {
       console.error("Error generating PDF:", pdfError);
-      return res.status(500).json({ message: "Failed to generate PDF", error: pdfError.message });
+      return res.status(500).json({ 
+        message: "Failed to generate PDF", 
+        error: pdfError.message 
+      });
     }
     
     // Send emails with PDF attachment
@@ -186,17 +191,24 @@ export const shareProjectDetails = async (req, res) => {
       console.error("Error sending emails:", emailError);
       // Try to clean up the PDF file even if emails fail
       try {
-        fs.unlinkSync(pdfResult.filePath);
+        if (fs.existsSync(pdfResult.filePath)) {
+          fs.unlinkSync(pdfResult.filePath);
+        }
       } catch (unlinkError) {
         console.error("Error deleting temporary PDF file:", unlinkError);
       }
-      return res.status(500).json({ message: "Failed to send emails", error: emailError.message });
+      return res.status(500).json({ 
+        message: "Failed to send emails", 
+        error: emailError.message 
+      });
     }
     
     // Clean up temporary file
     try {
-      fs.unlinkSync(pdfResult.filePath);
-      console.log("Temporary PDF file deleted");
+      if (fs.existsSync(pdfResult.filePath)) {
+        fs.unlinkSync(pdfResult.filePath);
+        console.log("Temporary PDF file deleted");
+      }
     } catch (unlinkError) {
       console.error("Error deleting temporary PDF file:", unlinkError);
       // Don't fail the request if we can't delete the temp file
@@ -207,6 +219,9 @@ export const shareProjectDetails = async (req, res) => {
     });
   } catch (error) {
     console.error("Error sharing project details:", error);
-    res.status(500).json({ message: "Error sharing project details", error: error.message });
+    res.status(500).json({ 
+      message: "Error sharing project details", 
+      error: error.message 
+    });
   }
 };
