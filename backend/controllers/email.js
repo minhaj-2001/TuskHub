@@ -146,14 +146,20 @@ export const shareProjectDetails = async (req, res) => {
     
     // Generate PDF with error handling
     let pdfResult;
-    try {
-      pdfResult = await generateProjectPDF(project.toObject());
-      console.log("PDF generated successfully:", pdfResult.fileName);
-    } catch (pdfError) {
-      console.error("Error generating PDF:", pdfError);
-      return res.status(500).json({ message: "Failed to generate PDF", error: pdfError.message });
-    }
-    
+  try {
+  pdfResult = await generateProjectPDF(project.toObject());
+  console.log("PDF generated successfully:", pdfResult.fileName);
+} catch (pdfError) {
+  console.error("Error generating PDF:", pdfError);
+  
+  // Create a simple text-based report as fallback
+  const textReport = generateTextReport(project.toObject());
+  pdfResult = {
+    filePath: textReport.filePath,
+    fileName: textReport.fileName
+  };
+  console.log("Text report generated as fallback");
+}
     // Send emails with PDF attachment
     const emailPromises = emails.map(email => {
       const subject = `Project Details: ${project.project_name}`;
