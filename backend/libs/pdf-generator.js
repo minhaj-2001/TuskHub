@@ -208,59 +208,106 @@ export const generateProjectPDF = async (projectData) => {
     let pdfBuffer;
     
     try {
-      // Configure Puppeteer for serverless environments
-      const puppeteerOptions = {
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-software-rasterizer',
-          '--disable-extensions',
-          '--single-process',
-          '--no-zygote',
-          '--disable-web-security',
-          '--disable-features=VizDisplayCompositor'
-        ],
-        timeout: 30000
-      };
+      // Check if we're in a serverless environment
+      const isServerless = process.env.VERCEL || process.env.RENDER;
       
-      browser = await puppeteer.launch(puppeteerOptions);
-      const page = await browser.newPage();
+      if (isServerless) {
+        // Use a remote browser service for serverless environments
+        console.log("Using remote browser service for PDF generation");
+        
+        // We'll use Browserless.io as an example, but you can use any similar service
+        const browserlessAPIKey = process.env.BROWSERLESS_API_KEY;
+        if (!browserlessAPIKey) {
+          throw new Error("Browserless API key not configured for serverless environment");
+        }
+        
+        const browserlessUrl = `https://chrome.browserless.io/pdf?token=${browserlessAPIKey}`;
+        
+        const response = await fetch(browserlessUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            html: htmlContent,
+            options: {
+              format: 'A4',
+              printBackground: true,
+              margin: {
+                top: '20mm',
+                right: '20mm',
+                bottom: '20mm',
+                left: '20mm'
+              },
+              preferCSSPageSize: true
+            }
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Browserless API error: ${response.status} ${response.statusText}`);
+        }
+        
+        pdfBuffer = Buffer.from(await response.arrayBuffer());
+        console.log("PDF generated successfully with Browserless");
+      } else {
+        // Local environment - use Puppeteer directly
+        console.log("Using local Puppeteer for PDF generation");
+        
+        const puppeteerOptions = {
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-software-rasterizer',
+            '--disable-extensions',
+            '--single-process',
+            '--no-zygote',
+            '--disable-web-security',
+            '--disable-features=VizDisplayCompositor'
+          ],
+          timeout: 30000
+        };
+        
+        browser = await puppeteer.launch(puppeteerOptions);
+        const page = await browser.newPage();
+        
+        // Set viewport size
+        await page.setViewport({ width: 800, height: 1129 });
+        
+        // Set content with proper error handling
+        await page.setContent(htmlContent, { 
+          waitUntil: 'networkidle0',
+          timeout: 30000 
+        });
+        
+        // Generate PDF as buffer
+        pdfBuffer = await page.pdf({
+          format: 'A4',
+          printBackground: true,
+          margin: {
+            top: '20mm',
+            right: '20mm',
+            bottom: '20mm',
+            left: '20mm'
+          },
+          preferCSSPageSize: true
+        });
+        
+        console.log("PDF generated successfully with Puppeteer");
+        
+        // Close browser
+        await browser.close();
+      }
+    } catch (error) {
+      console.error("Error generating PDF:", error);
       
-      // Set viewport size
-      await page.setViewport({ width: 800, height: 1129 });
+      // Fallback to jsPDF if all else fails
+      console.log("Attempting fallback PDF generation with jsPDF");
       
-      // Set content with proper error handling
-      await page.setContent(htmlContent, { 
-        waitUntil: 'networkidle0',
-        timeout: 30000 
-      });
-      
-      // Generate PDF as buffer
-      pdfBuffer = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: {
-          top: '20mm',
-          right: '20mm',
-          bottom: '20mm',
-          left: '20mm'
-        },
-        preferCSSPageSize: true
-      });
-      
-      console.log("PDF generated successfully with Puppeteer");
-    } catch (browserError) {
-      console.error("Error with Puppeteer:", browserError);
-      
-      // Fallback: Use a simplified HTML-to-PDF conversion without browser
-      console.log("Attempting fallback PDF generation without browser");
-      
-      // We'll use a simple approach with jsPDF
       const { jsPDF } = await import('jspdf');
-      
       const doc = new jsPDF('p', 'mm', 'a4');
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -441,11 +488,6 @@ export const generateProjectPDF = async (projectData) => {
       
       pdfBuffer = Buffer.from(doc.output('arraybuffer'));
       console.log("Fallback PDF generated successfully");
-    } finally {
-      // Close browser if it was successfully launched
-      if (browser) {
-        await browser.close();
-      }
     }
     
     // Create file path for compatibility
