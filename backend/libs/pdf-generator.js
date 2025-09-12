@@ -1,5 +1,5 @@
 // backend/libs/pdf-generator.js
-import axios from 'axios';
+import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -8,7 +8,7 @@ export const generateProjectPDF = async (projectData) => {
   try {
     console.log("Generating PDF for project:", projectData.project_name);
     
-    // Create the HTML content (same as your original design)
+    // Create a temporary HTML file for the PDF content
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -201,43 +201,47 @@ export const generateProjectPDF = async (projectData) => {
       </body>
       </html>
     `;
-    
+
     // Create a temporary file
     const tempDir = os.tmpdir();
     const fileName = `project-${projectData._id}-${Date.now()}.pdf`;
     const filePath = path.join(tempDir, fileName);
+
     console.log("Generating PDF at path:", filePath);
-    
-    // Use PDFShift API to convert HTML to PDF
-    const response = await axios.post(
-      'https://api.pdfshift.io/v3/convert/pdf',
-      {
-        source: htmlContent,
-        filename: fileName,
-        format: 'pdf',
-        options: {
-          marginTop: '20mm',
-          marginRight: '20mm',
-          marginBottom: '20mm',
-          marginLeft: '20mm',
-          printBackground: true,
-          landscape: false,
-          scale: 1
+
+    // Launch Puppeteer with error handling
+    let browser;
+    try {
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
+      
+      const page = await browser.newPage();
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+      
+      // Generate PDF
+      await page.pdf({
+        path: filePath,
+        format: 'A4',
+        printBackground: true,
+        margin: {
+          top: '20mm',
+          right: '20mm',
+          bottom: '20mm',
+          left: '20mm'
         }
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.PDFSHIFT_API_KEY}`
-        },
-        responseType: 'arraybuffer'
+      });
+      
+      console.log("PDF generated successfully");
+    } catch (browserError) {
+      console.error("Error with Puppeteer:", browserError);
+      throw new Error(`Failed to generate PDF: ${browserError.message}`);
+    } finally {
+      if (browser) {
+        await browser.close();
       }
-    );
-    
-    // Save the PDF
-    fs.writeFileSync(filePath, Buffer.from(response.data));
-    
-    console.log("PDF generated successfully");
+    }
     
     return {
       filePath,
@@ -245,136 +249,6 @@ export const generateProjectPDF = async (projectData) => {
     };
   } catch (error) {
     console.error('Error generating PDF:', error);
-    
-    // Fallback to a simpler PDF generation if PDFShift fails
-    try {
-      console.log("Attempting fallback PDF generation...");
-      return await generateSimplePDF(projectData);
-    } catch (fallbackError) {
-      console.error('Fallback PDF generation also failed:', fallbackError);
-      throw new Error(`Failed to generate PDF: ${error.message}`);
-    }
+    throw new Error(`Failed to generate PDF: ${error.message}`);
   }
 };
-
-// Fallback PDF generation using pdfkit
-async function generateSimplePDF(projectData) {
-  const PDFDocument = require('pdfkit');
-  
-  const tempDir = os.tmpdir();
-  const fileName = `project-${projectData._id}-${Date.now()}.pdf`;
-  const filePath = path.join(tempDir, fileName);
-  
-  const doc = new PDFDocument({
-    margin: 50,
-    size: 'A4'
-  });
-  
-  const stream = fs.createWriteStream(filePath);
-  doc.pipe(stream);
-  
-  // Add title
-  doc.fontSize(24).fillColor('#2c3e50').text(projectData.project_name, { align: 'center' });
-  doc.moveDown();
-  doc.fontSize(14).fillColor('#666').text('Project Details Report', { align: 'center' });
-  doc.moveDown(2);
-  
-  // Add project information
-  doc.fontSize(16).fillColor('#333').text('Project Information', { underline: true });
-  doc.moveDown(0.5);
-  
-  doc.fontSize(12).fillColor('#555');
-  if (projectData.description) {
-    doc.text(`Description: ${projectData.description}`, { align: 'left' });
-  }
-  doc.text(`Status: ${projectData.status}`, { align: 'left' });
-  doc.text(`Created: ${new Date(projectData.created_at).toLocaleDateString()}`, { align: 'left' });
-  doc.text(`Owner: ${projectData.owner.name}`, { align: 'left' });
-  doc.moveDown(1.5);
-  
-  // Add stages section
-  if (projectData.stages && projectData.stages.length > 0) {
-    doc.fontSize(16).fillColor('#333').text('Project Stages', { underline: true });
-    doc.moveDown(0.5);
-    
-    projectData.stages.forEach((stage) => {
-      doc.fontSize(14).fillColor('#333').text(stage.stage.stage_name, { underline: true });
-      doc.moveDown(0.3);
-      
-      if (stage.stage.description) {
-        doc.fontSize(12).fillColor('#555').text(`Description: ${stage.stage.description}`);
-        doc.moveDown(0.2);
-      }
-      
-      doc.fontSize(12).fillColor('#555').text(`Status: ${stage.status}`);
-      doc.text(`Start Date: ${stage.start_date ? new Date(stage.start_date).toLocaleDateString() : 'Not set'}`);
-      doc.text(`Completion Date: ${stage.completion_date ? new Date(stage.completion_date).toLocaleDateString() : 'Not set'}`);
-      doc.moveDown(0.5);
-    });
-  } else {
-    doc.fontSize(12).fillColor('#666').text('No stages found for this project.');
-    doc.moveDown(1);
-  }
-  
-  // Add footer
-  doc.fontSize(10).fillColor('#999');
-  doc.text(`Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`, { align: 'center' });
-  doc.text('© 2025 TaskHub Project Management System', { align: 'center' });
-  
-  doc.end();
-  
-  await new Promise((resolve, reject) => {
-    stream.on('finish', resolve);
-    stream.on('error', reject);
-  });
-  
-  console.log("Fallback PDF generated successfully");
-  
-  return {
-    filePath,
-    fileName
-  };
-}
-
-// Helper function to generate text report as final fallback
-function generateTextReport(projectData) {
-  const tempDir = os.tmpdir();
-  const fileName = `project-${projectData._id}-${Date.now()}.txt`;
-  const filePath = path.join(tempDir, fileName);
-  
-  let report = `PROJECT DETAILS REPORT\n`;
-  report += `=====================\n\n`;
-  report += `Project Name: ${projectData.project_name}\n`;
-  report += `Description: ${projectData.description || 'No description provided'}\n`;
-  report += `Status: ${projectData.status}\n`;
-  report += `Created: ${new Date(projectData.created_at).toLocaleDateString()}\n`;
-  report += `Owner: ${projectData.owner.name}\n\n`;
-  
-  if (projectData.stages && projectData.stages.length > 0) {
-    report += `PROJECT STAGES\n`;
-    report += `==============\n\n`;
-    
-    projectData.stages.forEach((stage, index) => {
-      report += `${index + 1}. ${stage.stage.stage_name}\n`;
-      report += `   Status: ${stage.status}\n`;
-      report += `   Start Date: ${stage.start_date ? new Date(stage.start_date).toLocaleDateString() : 'Not set'}\n`;
-      report += `   Completion Date: ${stage.completion_date ? new Date(stage.completion_date).toLocaleDateString() : 'Not set'}\n`;
-      if (stage.stage.description) {
-        report += `   Description: ${stage.stage.description}\n`;
-      }
-      report += `\n`;
-    });
-  } else {
-    report += `No stages found for this project.\n\n`;
-  }
-  
-  report += `Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}\n`;
-  report += `© 2025 TaskHub Project Management System\n`;
-  
-  fs.writeFileSync(filePath, report);
-  
-  return {
-    filePath,
-    fileName
-  };
-}
