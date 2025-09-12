@@ -1,5 +1,5 @@
-// backend/libs/pdf-generator.js
-import puppeteer from 'puppeteer';
+// backend/libs/pdf-generator.js (Cloud-based alternative)
+import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -8,7 +8,7 @@ export const generateProjectPDF = async (projectData) => {
   try {
     console.log("Generating PDF for project:", projectData.project_name);
     
-    // Create a temporary HTML file for the PDF content
+    // Create the HTML content (same as before)
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -201,47 +201,42 @@ export const generateProjectPDF = async (projectData) => {
       </body>
       </html>
     `;
-
+    
     // Create a temporary file
     const tempDir = os.tmpdir();
     const fileName = `project-${projectData._id}-${Date.now()}.pdf`;
     const filePath = path.join(tempDir, fileName);
-
     console.log("Generating PDF at path:", filePath);
-
-    // Launch Puppeteer with error handling
-    let browser;
-    try {
-      browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
-      
-      const page = await browser.newPage();
-      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-      
-      // Generate PDF
-      await page.pdf({
-        path: filePath,
-        format: 'A4',
-        printBackground: true,
-        margin: {
-          top: '20mm',
-          right: '20mm',
-          bottom: '20mm',
-          left: '20mm'
+    
+    // Use a cloud-based HTML to PDF service
+    // Example using HTML2PDFRocket (you'll need to sign up for an API key)
+    const response = await axios.post(
+      'https://api.html2pdfrocket.com/v1/convert',
+      {
+        html: htmlContent,
+        outputFormat: 'pdf',
+        filename: fileName,
+        options: {
+          marginTop: '20mm',
+          marginRight: '20mm',
+          marginBottom: '20mm',
+          marginLeft: '20mm',
+          printBackground: true
         }
-      });
-      
-      console.log("PDF generated successfully");
-    } catch (browserError) {
-      console.error("Error with Puppeteer:", browserError);
-      throw new Error(`Failed to generate PDF: ${browserError.message}`);
-    } finally {
-      if (browser) {
-        await browser.close();
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.HTML2PDF_API_KEY}`
+        },
+        responseType: 'arraybuffer'
       }
-    }
+    );
+    
+    // Save the PDF
+    fs.writeFileSync(filePath, Buffer.from(response.data));
+    
+    console.log("PDF generated successfully");
     
     return {
       filePath,
