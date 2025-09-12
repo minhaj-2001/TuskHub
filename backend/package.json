@@ -11,6 +11,9 @@
     "audit": "npm audit --audit-level=moderate",
     "audit:fix": "npm audit fix --force"
   },
+  "engines": {
+    "node": "16.x"
+  },
   "author": "codewave",
   "license": "ISC",
   "description": "",

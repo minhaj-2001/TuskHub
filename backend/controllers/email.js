@@ -4,7 +4,7 @@ import Project from "../models/project.js";
 import User from "../models/user.js";
 import { generateProjectPDF } from "../libs/pdf-generator.js";
 import { sendEmailWithAttachment } from "../libs/send-email.js";
-import { generateProjectPDFFallback } from '../libs/pdf-generator-fallback.js';
+// import { generateProjectPDFFallback } from '../libs/pdf-generator-fallback.js';
 import fs from 'fs'; // Make sure to import fs
 
 // Get all emails
@@ -107,6 +107,8 @@ export const deleteEmail = async (req, res) => {
 // Share project details via email with PDF attachment
 // backend/controllers/email-controller.js
 // Share project details via email with PDF attachment
+// backend/controllers/email-controller.js
+// Share project details via email with PDF attachment
 export const shareProjectDetails = async (req, res) => {
   try {
     const { projectId, emailIds } = req.body;
@@ -147,28 +149,18 @@ export const shareProjectDetails = async (req, res) => {
     
     console.log("Found emails:", emails.length);
     
-  // In the shareProjectDetails function, replace the PDF generation part with:
-let pdfResult;
-try {
-  // Try the primary PDF generation method first
-  pdfResult = await generateProjectPDF(project.toObject());
-  console.log("PDF generated successfully:", pdfResult.fileName);
-} catch (pdfError) {
-  console.error("Error generating PDF with primary method:", pdfError);
-  console.log("Trying fallback method...");
-  
-  try {
-    // Use the fallback method if the primary method fails
-    pdfResult = await generateProjectPDFFallback(project.toObject());
-    console.log("PDF generated successfully with fallback method:", pdfResult.fileName);
-  } catch (fallbackError) {
-    console.error("Error generating PDF with fallback method:", fallbackError);
-    return res.status(500).json({ 
-      message: "Failed to generate PDF with both methods", 
-      error: fallbackError.message 
-    });
-  }
-}
+    // Generate PDF with error handling
+    let pdfResult;
+    try {
+      pdfResult = await generateProjectPDF(project.toObject());
+      console.log("PDF generated successfully:", pdfResult.fileName);
+    } catch (pdfError) {
+      console.error("Error generating PDF:", pdfError);
+      return res.status(500).json({ 
+        message: "Failed to generate PDF", 
+        error: pdfError.message 
+      });
+    }
     
     // Send emails with PDF attachment
     const emailPromises = emails.map(email => {

@@ -211,31 +211,58 @@ export const generateProjectPDF = async (projectData) => {
     // Launch Puppeteer with configuration for serverless environments
     let browser;
     try {
-      // Configuration for serverless environments
+      // Check if we're in a serverless environment
+      const isServerless = process.env.VERCEL || process.env.RENDER || process.env.AWS_LAMBDA_FUNCTION_NAME;
+      
+      // Configuration options for different environments
       const puppeteerOptions = {
         headless: true,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage', // Avoid shared memory issues
-          '--disable-accelerated-2d-canvas', // Avoid canvas issues
-          '--no-first-run', // Skip first run setup
-          '--no-zygote', // Disable zygote process
-          '--disable-gpu', // Disable GPU hardware acceleration
-          '--single-process', // Run in a single process
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu',
+          '--single-process',
+          '--disable-extensions',
+          '--disable-plugins',
+          '--disable-images',
+          '--disable-javascript-harmony-promises',
+          '--disable-wake-on-wifi',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding'
         ],
-        timeout: 60000, // Increase timeout
+        timeout: 60000,
+        ignoreHTTPSErrors: true
       };
       
-      // Try to launch Puppeteer
+      // Additional options for serverless environments
+      if (isServerless) {
+        puppeteerOptions.args.push(
+          '--disable-software-rasterizer',
+          '--disable-notifications',
+          '--disable-hang-monitor',
+          '--disable-sync',
+          '--disable-background-mode',
+          '--disable-ipc-flooding-protection'
+        );
+      }
+      
       browser = await puppeteer.launch(puppeteerOptions);
       
       const page = await browser.newPage();
       
-      // Set content with additional error handling
+      // Set viewport
+      await page.setViewport({ width: 800, height: 600 });
+      
+      // Set content with error handling
       await page.setContent(htmlContent, { 
         waitUntil: 'networkidle0',
-        timeout: 30000 // Increase timeout for setContent
+        timeout: 30000
       });
       
       // Generate PDF with error handling
@@ -249,7 +276,8 @@ export const generateProjectPDF = async (projectData) => {
           bottom: '20mm',
           left: '20mm'
         },
-        timeout: 60000 // Increase timeout for PDF generation
+        timeout: 60000,
+        preferCSSPageSize: true
       });
       
       console.log("PDF generated successfully");
@@ -258,7 +286,9 @@ export const generateProjectPDF = async (projectData) => {
       throw new Error(`Failed to generate PDF: ${browserError.message}`);
     } finally {
       if (browser) {
-        await browser.close();
+        await browser.close().catch(err => {
+          console.error("Error closing browser:", err);
+        });
       }
     }
     
