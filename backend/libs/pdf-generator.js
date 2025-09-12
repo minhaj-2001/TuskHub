@@ -3,12 +3,13 @@ import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { Buffer } from 'buffer';
 
 export const generateProjectPDF = async (projectData) => {
   try {
     console.log("Generating PDF for project:", projectData.project_name);
     
-    // Create a temporary HTML file for the PDF content
+    // Create the HTML content (exactly as in your original)
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -202,72 +203,43 @@ export const generateProjectPDF = async (projectData) => {
       </html>
     `;
     
-    // Create a temporary file
-    const tempDir = os.tmpdir();
-    const fileName = `project-${projectData._id}-${Date.now()}.pdf`;
-    const filePath = path.join(tempDir, fileName);
-    console.log("Generating PDF at path:", filePath);
-    
-    // Launch Puppeteer with configuration for serverless environments
+    // Try to generate PDF using Puppeteer with serverless-compatible options
     let browser;
+    let pdfBuffer;
+    
     try {
-      // Check if we're in a serverless environment
-      const isServerless = process.env.VERCEL || process.env.RENDER || process.env.AWS_LAMBDA_FUNCTION_NAME;
-      
-      // Configuration options for different environments
+      // Configure Puppeteer for serverless environments
       const puppeteerOptions = {
         headless: true,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
           '--disable-gpu',
-          '--single-process',
+          '--disable-software-rasterizer',
           '--disable-extensions',
-          '--disable-plugins',
-          '--disable-images',
-          '--disable-javascript-harmony-promises',
-          '--disable-wake-on-wifi',
-          '--disable-features=VizDisplayCompositor',
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding'
+          '--single-process',
+          '--no-zygote',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor'
         ],
-        timeout: 60000,
-        ignoreHTTPSErrors: true
+        timeout: 30000
       };
       
-      // Additional options for serverless environments
-      if (isServerless) {
-        puppeteerOptions.args.push(
-          '--disable-software-rasterizer',
-          '--disable-notifications',
-          '--disable-hang-monitor',
-          '--disable-sync',
-          '--disable-background-mode',
-          '--disable-ipc-flooding-protection'
-        );
-      }
-      
       browser = await puppeteer.launch(puppeteerOptions);
-      
       const page = await browser.newPage();
       
-      // Set viewport
-      await page.setViewport({ width: 800, height: 600 });
+      // Set viewport size
+      await page.setViewport({ width: 800, height: 1129 });
       
-      // Set content with error handling
+      // Set content with proper error handling
       await page.setContent(htmlContent, { 
         waitUntil: 'networkidle0',
-        timeout: 30000
+        timeout: 30000 
       });
       
-      // Generate PDF with error handling
-      await page.pdf({
-        path: filePath,
+      // Generate PDF as buffer
+      pdfBuffer = await page.pdf({
         format: 'A4',
         printBackground: true,
         margin: {
@@ -276,25 +248,217 @@ export const generateProjectPDF = async (projectData) => {
           bottom: '20mm',
           left: '20mm'
         },
-        timeout: 60000,
         preferCSSPageSize: true
       });
       
-      console.log("PDF generated successfully");
+      console.log("PDF generated successfully with Puppeteer");
     } catch (browserError) {
       console.error("Error with Puppeteer:", browserError);
-      throw new Error(`Failed to generate PDF: ${browserError.message}`);
-    } finally {
-      if (browser) {
-        await browser.close().catch(err => {
-          console.error("Error closing browser:", err);
+      
+      // Fallback: Use a simplified HTML-to-PDF conversion without browser
+      console.log("Attempting fallback PDF generation without browser");
+      
+      // We'll use a simple approach with jsPDF
+      const { jsPDF } = await import('jspdf');
+      
+      const doc = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      let yPosition = 20;
+      
+      // Helper function to add text with word wrap
+      const addText = (text, x, y, fontSize = 12, maxWidth = pageWidth - 40) => {
+        doc.setFontSize(fontSize);
+        const lines = doc.splitTextToSize(text, maxWidth);
+        doc.text(lines, x, y);
+        return lines.length * (fontSize * 0.5) + 5;
+      };
+      
+      // Helper function to add colored text
+      const addColoredText = (text, x, y, color, fontSize = 12) => {
+        doc.setTextColor(color.r, color.g, color.b);
+        doc.setFontSize(fontSize);
+        doc.text(text, x, y);
+        doc.setTextColor(0, 0, 0); // Reset to black
+      };
+      
+      // Header
+      doc.setFontSize(24);
+      doc.text(projectData.project_name, pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 15;
+      
+      doc.setFontSize(14);
+      doc.text('Project Details Report', pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 20;
+      
+      // Project Info
+      doc.setFontSize(16);
+      doc.text('Project Information', 20, yPosition);
+      yPosition += 10;
+      
+      doc.setFontSize(12);
+      yPosition += addText(`Description: ${projectData.description || 'No description provided'}`, 20, yPosition);
+      yPosition += addText(`Status: ${projectData.status}`, 20, yPosition);
+      yPosition += addText(`Created At: ${new Date(projectData.created_at).toLocaleDateString()}`, 20, yPosition);
+      yPosition += addText(`Owner: ${projectData.owner.name}`, 20, yPosition);
+      yPosition += 20;
+      
+      // Stages Section
+      if (projectData.stages && projectData.stages.length > 0) {
+        doc.setFontSize(16);
+        doc.text('Project Stages', 20, yPosition);
+        yPosition += 15;
+        
+        // Table Header
+        const tableStart = yPosition;
+        const cellHeight = 8;
+        const colWidths = [40, 60, 30, 30, 30];
+        const headers = ['Stage Name', 'Description', 'Status', 'Start Date', 'Completion Date'];
+        
+        // Draw table header
+        doc.setFillColor(240, 240, 240);
+        doc.rect(20, tableStart, pageWidth - 40, cellHeight, 'F');
+        
+        doc.setFontSize(10);
+        let xPos = 20;
+        headers.forEach((header, i) => {
+          doc.text(header, xPos, tableStart + cellHeight / 2 + 2);
+          xPos += colWidths[i];
         });
+        
+        yPosition = tableStart + cellHeight;
+        
+        // Table rows
+        projectData.stages.forEach(stage => {
+          if (yPosition > pageHeight - 30) {
+            doc.addPage();
+            yPosition = 20;
+          }
+          
+          // Alternate row colors
+          if ((projectData.stages.indexOf(stage) % 2) === 0) {
+            doc.setFillColor(249, 249, 249);
+            doc.rect(20, yPosition, pageWidth - 40, cellHeight, 'F');
+          }
+          
+          doc.setFontSize(9);
+          xPos = 20;
+          
+          // Stage Name
+          const stageNameLines = doc.splitTextToSize(stage.stage.stage_name, colWidths[0]);
+          doc.text(stageNameLines, xPos, yPosition + cellHeight / 2 + 2);
+          xPos += colWidths[0];
+          
+          // Description
+          const descLines = doc.splitTextToSize(stage.stage.description || 'No description', colWidths[1]);
+          doc.text(descLines, xPos, yPosition + cellHeight / 2 + 2);
+          xPos += colWidths[1];
+          
+          // Status
+          const statusColor = stage.status === 'Completed' ? {r:46, g:204, b:113} : {r:52, g:152, b:219};
+          addColoredText(stage.status, xPos, yPosition + cellHeight / 2 + 2, statusColor, 9);
+          xPos += colWidths[2];
+          
+          // Start Date
+          doc.text(stage.start_date ? new Date(stage.start_date).toLocaleDateString() : 'Not set', 
+                   xPos, yPosition + cellHeight / 2 + 2);
+          xPos += colWidths[3];
+          
+          // Completion Date
+          doc.text(stage.completion_date ? new Date(stage.completion_date).toLocaleDateString() : 'Not set', 
+                   xPos, yPosition + cellHeight / 2 + 2);
+          
+          yPosition += cellHeight;
+        });
+        
+        yPosition += 15;
+        
+        // Card View Section
+        doc.setFontSize(16);
+        doc.text('Stage Details', 20, yPosition);
+        yPosition += 15;
+        
+        projectData.stages.forEach(stage => {
+          if (yPosition > pageHeight - 50) {
+            doc.addPage();
+            yPosition = 20;
+          }
+          
+          // Card border
+          doc.setDrawColor(221, 221, 221);
+          doc.rect(20, yPosition, pageWidth - 40, 30);
+          
+          // Stage name and status
+          doc.setFontSize(12);
+          doc.text(stage.stage.stage_name, 25, yPosition + 10);
+          
+          const statusColor = stage.status === 'Completed' ? {r:46, g:204, b:113} : {r:52, g:152, b:219};
+          addColoredText(stage.status, pageWidth - 60, yPosition + 10, statusColor, 10);
+          
+          // Description
+          if (stage.stage.description) {
+            doc.setFontSize(10);
+            yPosition += addText(stage.stage.description, 25, yPosition + 20, 10, pageWidth - 70);
+          }
+          
+          // Dates
+          doc.setFontSize(9);
+          doc.text(`Start Date: ${stage.start_date ? new Date(stage.start_date).toLocaleDateString() : 'Not set'}`, 
+                   25, yPosition);
+          yPosition += 5;
+          
+          if (stage.completion_date) {
+            doc.text(`Completion Date: ${new Date(stage.completion_date).toLocaleDateString()}`, 
+                     25, yPosition);
+            yPosition += 5;
+          }
+          
+          yPosition += 10;
+        });
+      } else {
+        doc.setFontSize(12);
+        doc.text('No stages found', 20, yPosition);
+      }
+      
+      // Footer
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(10);
+        doc.text(
+          `Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`,
+          pageWidth / 2,
+          pageHeight - 15,
+          { align: 'center' }
+        );
+        doc.text(
+          '© 2025 TaskHub Project Management System',
+          pageWidth / 2,
+          pageHeight - 10,
+          { align: 'center' }
+        );
+      }
+      
+      pdfBuffer = Buffer.from(doc.output('arraybuffer'));
+      console.log("Fallback PDF generated successfully");
+    } finally {
+      // Close browser if it was successfully launched
+      if (browser) {
+        await browser.close();
       }
     }
     
+    // Create file path for compatibility
+    const fileName = `project-${projectData._id}-${Date.now()}.pdf`;
+    const filePath = path.join(os.tmpdir(), fileName);
+    
+    // Write buffer to file for compatibility with existing email sending logic
+    fs.writeFileSync(filePath, pdfBuffer);
+    
     return {
       filePath,
-      fileName
+      fileName,
+      pdfBuffer
     };
   } catch (error) {
     console.error('Error generating PDF:', error);
