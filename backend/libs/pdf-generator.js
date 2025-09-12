@@ -210,7 +210,6 @@ export const generateProjectPDF = async (projectData) => {
     console.log("Generating PDF at path:", filePath);
 
     // Launch Puppeteer with error handling
-    let browser;
     try {
     const browser = await puppeteer.launch({
       args: chromium.args,
