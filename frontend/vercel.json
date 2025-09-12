@@ -1,6 +1,6 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist/client",
+  "buildCommand": "npm install && npx puppeteer browsers install",
   "installCommand": "npm install",
+  "outputDirectory": "dist/client",
   "framework": "react-router"
 }
