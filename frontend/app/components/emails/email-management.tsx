@@ -84,6 +84,8 @@ const EmailManagement = () => {
   // Mutation for sharing project details
 // In the shareProjectMutation in the EmailManagement component
 
+// frontend/app/components/email-management.tsx
+// Update the shareProjectMutation error handling
 const shareProjectMutation = useMutation({
   mutationFn: (data: { projectId: string; emailIds: string[] }) => 
     postData('/emails/share-project', data),
@@ -95,8 +97,15 @@ const shareProjectMutation = useMutation({
   },
   onError: (error: any) => {
     console.error("Share project error:", error);
-    const errorMessage = error.response?.data?.message || error.message || "Failed to share project details";
-    toast.error(errorMessage);
+    // Check if the error is related to PDF generation
+    if (error.message && error.message.includes("Failed to generate PDF")) {
+      toast.error("Failed to generate PDF. Please try again later or contact support.");
+    } else if (error.message && error.message.includes("Failed to send emails")) {
+      toast.error("Failed to send emails. Please check the email addresses and try again.");
+    } else {
+      const errorMessage = error.response?.data?.message || error.message || "Failed to share project details";
+      toast.error(errorMessage);
+    }
   },
 });
   
