@@ -1,5 +1,5 @@
 // backend/libs/pdf-generator.js
-import { chromium } from 'playwright';
+import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -8,7 +8,7 @@ export const generateProjectPDF = async (projectData) => {
   try {
     console.log("Generating PDF for project:", projectData.project_name);
     
-    // Create the HTML content (same as before)
+    // Create a temporary HTML file for the PDF content
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -201,36 +201,22 @@ export const generateProjectPDF = async (projectData) => {
       </body>
       </html>
     `;
-    
+
     // Create a temporary file
     const tempDir = os.tmpdir();
     const fileName = `project-${projectData._id}-${Date.now()}.pdf`;
     const filePath = path.join(tempDir, fileName);
+
     console.log("Generating PDF at path:", filePath);
-    
-    // Launch browser with Playwright
-    const browser = await chromium.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-software-rasterizer',
-        '--disable-extensions',
-        '--no-first-run',
-        '--disable-default-apps',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        '--disable-features=TranslateUI',
-        '--disable-ipc-flooding-protection',
-        '--enable-unsafe-swiftshader',
-        '--single-process'
-      ]
-    });
-    
+
+    // Launch Puppeteer with error handling
+    let browser;
     try {
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
+      
       const page = await browser.newPage();
       await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
       
@@ -248,8 +234,13 @@ export const generateProjectPDF = async (projectData) => {
       });
       
       console.log("PDF generated successfully");
+    } catch (browserError) {
+      console.error("Error with Puppeteer:", browserError);
+      throw new Error(`Failed to generate PDF: ${browserError.message}`);
     } finally {
-      await browser.close();
+      if (browser) {
+        await browser.close();
+      }
     }
     
     return {
