@@ -14,7 +14,4 @@ const connectDB = async () => {
   }
 };
 
-// Import and run the Chromium setup
-require('./setup-chromium');
-
 module.exports = { connectDB };

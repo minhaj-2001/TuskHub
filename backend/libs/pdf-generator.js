@@ -1,15 +1,14 @@
 // backend/libs/pdf-generator.js
-import puppeteer from 'puppeteer';
+import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execSync } from 'child_process';
 
 export const generateProjectPDF = async (projectData) => {
   try {
     console.log("Generating PDF for project:", projectData.project_name);
     
-    // Create a temporary HTML file for the PDF content
+    // Create the HTML content (same as before)
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -209,91 +208,31 @@ export const generateProjectPDF = async (projectData) => {
     const filePath = path.join(tempDir, fileName);
     console.log("Generating PDF at path:", filePath);
     
-    // Function to get the Chromium executable path
-    const getChromiumExecutablePath = async () => {
-      try {
-        // First, try to get the path from puppeteer
-        const puppeteerPath = puppeteer.executablePath();
-        
-        // Check if the path exists
-        if (fs.existsSync(puppeteerPath)) {
-          console.log("Using Puppeteer's Chromium at:", puppeteerPath);
-          return puppeteerPath;
-        }
-        
-        // If not found, try to find system Chromium
-        const possiblePaths = [
-          '/usr/bin/chromium',
-          '/usr/bin/chromium-browser',
-          '/usr/bin/google-chrome-stable',
-          '/usr/bin/google-chrome',
-          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-          'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-          'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
-        ];
-        
-        for (const path of possiblePaths) {
-          if (fs.existsSync(path)) {
-            console.log("Using system Chromium at:", path);
-            return path;
-          }
-        }
-        
-        // If still not found, try to install Chromium on Linux
-        if (process.platform === 'linux') {
-          try {
-            console.log("Attempting to install Chromium...");
-            execSync('apt-get update && apt-get install -y chromium', { 
-              stdio: 'inherit',
-              timeout: 120000 // 2 minutes timeout
-            });
-            return '/usr/bin/chromium';
-          } catch (e) {
-            console.log("Failed to install Chromium via apt:", e.message);
-          }
-        }
-        
-        // As a last resort, try to download Chromium using Puppeteer
-        console.log("Downloading Chromium via Puppeteer...");
-        const browserFetcher = puppeteer.createBrowserFetcher();
-        const revisionInfo = await browserFetcher.download('puppeteer');
-        return revisionInfo.executablePath;
-      } catch (error) {
-        console.error("Error getting Chromium path:", error);
-        throw error;
-      }
-    };
+    // Launch browser with Playwright
+    const browser = await chromium.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-software-rasterizer',
+        '--disable-extensions',
+        '--no-first-run',
+        '--disable-default-apps',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-features=TranslateUI',
+        '--disable-ipc-flooding-protection',
+        '--enable-unsafe-swiftshader',
+        '--single-process'
+      ]
+    });
     
-    // Launch Puppeteer with error handling
-    let browser;
     try {
-      const executablePath = await getChromiumExecutablePath();
-      
-      browser = await puppeteer.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-software-rasterizer',
-          '--disable-extensions',
-          '--no-first-run',
-          '--disable-default-apps',
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding',
-          '--disable-features=TranslateUI',
-          '--disable-ipc-flooding-protection',
-          '--enable-unsafe-swiftshader',
-          '--single-process'
-        ],
-        executablePath,
-        timeout: 60000 // Increase timeout for browser launch
-      });
-      
       const page = await browser.newPage();
-      await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 30000 });
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
       
       // Generate PDF
       await page.pdf({
@@ -305,18 +244,12 @@ export const generateProjectPDF = async (projectData) => {
           right: '20mm',
           bottom: '20mm',
           left: '20mm'
-        },
-        timeout: 30000
+        }
       });
       
       console.log("PDF generated successfully");
-    } catch (browserError) {
-      console.error("Error with Puppeteer:", browserError);
-      throw new Error(`Failed to generate PDF: ${browserError.message}`);
     } finally {
-      if (browser) {
-        await browser.close();
-      }
+      await browser.close();
     }
     
     return {
