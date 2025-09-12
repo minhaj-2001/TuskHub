@@ -151,12 +151,8 @@ export const shareProjectDetails = async (req, res) => {
       console.log("PDF generated successfully:", pdfResult.fileName);
     } catch (pdfError) {
       console.error("Error generating PDF:", pdfError);
-      return res.status(500).json({ 
-        message: "Failed to generate PDF", 
-        error: pdfError.message 
-      });
+      return res.status(500).json({ message: "Failed to generate PDF", error: pdfError.message });
     }
-   
     
     // Send emails with PDF attachment
     const emailPromises = emails.map(email => {
