@@ -14,7 +14,7 @@ const allowedOrigins = [
   process.env.FRONTEND_URL, // Production frontend (Vercel)
   "http://localhost:5173", // Local development
   "http://localhost:3000", // Alternative local port
-  "https://tusk-hub.vercel.app" // Explicit production URL
+  "https://work-stage-tracker-final.vercel.app" // Explicit production URL
 ].filter(Boolean); // Remove any undefined values
 
 const corsOptions = {

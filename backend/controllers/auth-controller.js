@@ -21,11 +21,12 @@ const registerUser = async (req, res) => {
         role = "user"; // Users who sign up with referral links are regular users
       }
     }
-    
+
     const decision = await aj.protect(req, { email });
     console.log("Arcjet decision", decision.isDenied());
     if (decision.isDenied()) {
-      return res.status(403).json({ message: "Invalid email address" });
+      res.writeHead(403, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ message: "Invalid email address" }));
     }
     
     const existingUser = await User.findOne({ email });
@@ -62,45 +63,21 @@ const registerUser = async (req, res) => {
     const verificationLink = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
     const emailBody = `<p>Click <a href="${verificationLink}">here</a> to verify your email</p>`;
     const emailSubject = "Verify your email";
+    const isEmailSent = await sendEmail(email, emailSubject, emailBody);
     
-    // Only try to send email if email configuration is available
-    let isEmailSent = false;
-    let emailError = null;
-    
-    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-      try {
-        isEmailSent = await sendEmail(email, emailSubject, emailBody);
-        
-        if (!isEmailSent) {
-          emailError = "Failed to send verification email, but user was registered successfully.";
-          console.warn(emailError);
-        }
-      } catch (emailError) {
-        emailError = "Error sending verification email, but user was registered successfully.";
-        console.error(emailError, emailError);
-      }
-    } else {
-      emailError = "Email configuration not available. User was registered but verification email was not sent.";
-      console.warn(emailError);
+    if (!isEmailSent) {
+      return res.status(500).json({
+        message: "Failed to send verification email",
+      });
     }
     
-    // Remove sensitive information before sending response
-    const userResponse = newUser.toObject();
-    delete userResponse.password;
-    
     res.status(201).json({
-      message: "User registered successfully",
-      user: userResponse,
-      emailSent: isEmailSent,
-      emailError: emailError,
-      emailVerificationRequired: true
+      message:
+        "Verification email sent to your email. Please check and verify your account.",
     });
   } catch (error) {
-    console.error("Registration error:", error);
-    res.status(500).json({ 
-      message: "Internal server error",
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    console.log(error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
