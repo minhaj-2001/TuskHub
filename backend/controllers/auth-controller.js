@@ -68,11 +68,16 @@ const registerUser = async (req, res) => {
     let emailError = null;
     
     if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-      isEmailSent = await sendEmail(email, emailSubject, emailBody);
-      
-      if (!isEmailSent) {
-        emailError = "Failed to send verification email, but user was registered successfully.";
-        console.warn(emailError);
+      try {
+        isEmailSent = await sendEmail(email, emailSubject, emailBody);
+        
+        if (!isEmailSent) {
+          emailError = "Failed to send verification email, but user was registered successfully.";
+          console.warn(emailError);
+        }
+      } catch (emailError) {
+        emailError = "Error sending verification email, but user was registered successfully.";
+        console.error(emailError, emailError);
       }
     } else {
       emailError = "Email configuration not available. User was registered but verification email was not sent.";
