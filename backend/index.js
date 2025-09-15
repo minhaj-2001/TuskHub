@@ -1,3 +1,4 @@
+// backend/index.js
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
@@ -8,70 +9,49 @@ import routes from "./routes/index.js";
 dotenv.config();
 
 const app = express();
-
-// Get allowed origins from environment variables
+// Improved CORS configuration for multiple origins
 const allowedOrigins = [
-  process.env.FRONTEND_URL || "http://localhost:5173",
-  "http://localhost:5173",
-  "http://localhost:3000",
-  "https://work-stage-tracker-final.vercel.app", // Your deployed frontend URL
-  "https://*.vercel.app" // Allow all Vercel deployments
-].filter(Boolean);
+  process.env.FRONTEND_URL, // Production frontend (Vercel)
+  "http://localhost:5173", // Local development
+  "http://localhost:3000", // Alternative local port
+  "https://tusk-hub.vercel.app" // Explicit production URL
+].filter(Boolean); // Remove any undefined values
 
-// Configure CORS with more permissive settings for production
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
     
     // Check if the origin is in the allowed list
-    if (allowedOrigins.some(allowedOrigin => {
-      // Handle wildcard domains
-      if (allowedOrigin.includes('*')) {
-        const regex = new RegExp(allowedOrigin.replace('*', '.*'));
-        return regex.test(origin);
-      }
-      return allowedOrigin === origin;
-    })) {
+    if (allowedOrigins.indexOf(origin) !== -1) {
       return callback(null, true);
     } else {
-      console.log("Origin not allowed by CORS:", origin);
       return callback(new Error('Not allowed by CORS'));
     }
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  allowedHeaders: ["Content-Type", "Authorization"],
   optionsSuccessStatus: 200,
-  preflightContinue: false,
 };
 
 // Apply CORS middleware
 app.use(cors(corsOptions));
 
-// Handle preflight requests explicitly
+// Handle preflight requests
 app.options("*", cors(corsOptions));
 
 // Logging middleware
 app.use(morgan("dev"));
 
-// JSON parsing middleware
-app.use(express.json());
-
-// Add a middleware to log all incoming requests for debugging
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path} - Origin: ${req.headers.origin || 'None'}`);
-  next();
-});
-
-// Database connection with error handling
+// Database connection
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => console.log("✅ Database connected successfully"))
-  .catch((err) => {
-    console.log("❌ Failed to connect to DB:", err);
-    process.exit(1); // Exit if we can't connect to the database
-  });
+  .catch((err) => console.log("❌ Failed to connect to DB:", err));
+
+// JSON parsing middleware
+app.use(express.json());
 
 // Root route
 app.get("/", async (req, res) => {
@@ -80,11 +60,6 @@ app.get("/", async (req, res) => {
     version: "1.0.0",
     status: "Running"
   });
-});
-
-// Keep-alive endpoint for Render
-app.get("/ping", (req, res) => {
-  res.status(200).send("OK");
 });
 
 // API routes

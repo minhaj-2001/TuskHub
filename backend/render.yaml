@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: tuskhub-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        value: https://work-stage-tracker-final.vercel.app
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASS
+        sync: false
+      - key: BROWSERLESS_API_KEY
+        sync: false
+      - key: ARCJET_KEY
+        sync: false
+    healthCheckPath: /ping
+    healthCheckTimeout: 30
+    healthCheckInterval: 30
