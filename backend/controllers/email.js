@@ -1,10 +1,9 @@
-// backend/controllers/email-controller.js
 import Email from "../models/email.js";
 import Project from "../models/project.js";
 import User from "../models/user.js";
 import { generateProjectPDF } from "../libs/pdf-generator.js";
 import { sendEmailWithAttachment } from "../libs/send-email.js";
-import fs from 'fs'; // Make sure to import fs
+import fs from 'fs';
 
 // Get all emails
 export const getAllEmails = async (req, res) => {
@@ -104,8 +103,6 @@ export const deleteEmail = async (req, res) => {
 };
 
 // Share project details via email with PDF attachment
-// backend/controllers/email-controller.js
-// Share project details via email with PDF attachment
 export const shareProjectDetails = async (req, res) => {
   try {
     const { projectId, emailIds } = req.body;
@@ -153,10 +150,13 @@ export const shareProjectDetails = async (req, res) => {
       console.log("PDF generated successfully:", pdfResult.fileName);
     } catch (pdfError) {
       console.error("Error generating PDF:", pdfError);
-      return res.status(500).json({ message: "Failed to generate PDF", error: pdfError.message });
+      return res.status(500).json({ 
+        message: "Failed to generate PDF", 
+        error: pdfError.message 
+      });
     }
     
-    // Send emails with PDF attachment using buffer
+    // Send emails with PDF attachment
     const emailPromises = emails.map(email => {
       const subject = `Project Details: ${project.project_name}`;
       const body = `
@@ -172,37 +172,46 @@ export const shareProjectDetails = async (req, res) => {
         <p>Best regards,<br>${req.user.name}</p>
       `;
       
-      // Use the PDF buffer directly
       return sendEmailWithAttachment(
         email.email,
         subject,
         body,
-        pdfResult.pdfBuffer,
+        pdfResult.filePath,
         pdfResult.fileName
       );
     });
     
+    let emailResults;
     try {
-      await Promise.all(emailPromises);
-      console.log("All emails sent successfully");
+      emailResults = await Promise.allSettled(emailPromises);
+      console.log("All emails processed");
     } catch (emailError) {
-      console.error("Error sending emails:", emailError);
-      return res.status(500).json({ message: "Failed to send emails", error: emailError.message });
+      console.error("Error processing emails:", emailError);
     }
     
-    // Clean up temporary file if it exists
-    if (pdfResult.filePath && fs.existsSync(pdfResult.filePath)) {
-      try {
+    // Count successful emails
+    const successfulEmails = emailResults?.filter(result => result.status === 'fulfilled' && result.value === true).length || 0;
+    
+    // Clean up temporary file
+    try {
+      if (fs.existsSync(pdfResult.filePath)) {
         fs.unlinkSync(pdfResult.filePath);
         console.log("Temporary PDF file deleted");
-      } catch (unlinkError) {
-        console.error("Error deleting temporary PDF file:", unlinkError);
       }
+    } catch (unlinkError) {
+      console.error("Error deleting temporary PDF file:", unlinkError);
     }
     
-    res.status(200).json({ 
-      message: `Project details shared successfully with ${emails.length} email address(es)` 
-    });
+    // If at least one email was sent successfully, consider the operation a success
+    if (successfulEmails > 0) {
+      res.status(200).json({ 
+        message: `Project details shared successfully with ${successfulEmails} out of ${emails.length} email address(es)` 
+      });
+    } else {
+      res.status(500).json({ 
+        message: "Failed to send emails to any of the recipients. Please check your email configuration." 
+      });
+    }
   } catch (error) {
     console.error("Error sharing project details:", error);
     res.status(500).json({ message: "Error sharing project details", error: error.message });

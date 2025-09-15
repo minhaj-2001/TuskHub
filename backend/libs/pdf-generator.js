@@ -1,15 +1,13 @@
-// backend/libs/pdf-generator.js
 import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { Buffer } from 'buffer';
 
 export const generateProjectPDF = async (projectData) => {
   try {
     console.log("Generating PDF for project:", projectData.project_name);
     
-    // Create the HTML content (exactly as in your original)
+    // Create a temporary HTML file for the PDF content
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -17,8 +15,10 @@ export const generateProjectPDF = async (projectData) => {
         <meta charset="utf-8">
         <title>Project Details - ${projectData.project_name}</title>
         <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+          
           body {
-            font-family: Arial, sans-serif;
+            font-family: 'Inter', Arial, sans-serif;
             line-height: 1.6;
             color: #333;
             max-width: 800px;
@@ -203,88 +203,26 @@ export const generateProjectPDF = async (projectData) => {
       </html>
     `;
     
-    // Try to generate PDF using Puppeteer with serverless-compatible options
-    let browser;
-    let pdfBuffer;
+    // Create a temporary file
+    const tempDir = os.tmpdir();
+    const fileName = `project-${projectData._id}-${Date.now()}.pdf`;
+    const filePath = path.join(tempDir, fileName);
+    console.log("Generating PDF at path:", filePath);
     
-    try {
-      // Check if we're in a serverless environment
-      const isServerless = process.env.VERCEL || process.env.RENDER;
-      
-      if (isServerless) {
-        // Use a remote browser service for serverless environments
-        console.log("Using remote browser service for PDF generation");
-        
-        // We'll use Browserless.io as an example, but you can use any similar service
-        const browserlessAPIKey = process.env.BROWSERLESS_API_KEY;
-        if (!browserlessAPIKey) {
-          throw new Error("Browserless API key not configured for serverless environment");
-        }
-        
-        const browserlessUrl = `https://chrome.browserless.io/pdf?token=${browserlessAPIKey}`;
-        
-        const response = await fetch(browserlessUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            html: htmlContent,
-            options: {
-              format: 'A4',
-              printBackground: true,
-              margin: {
-                top: '20mm',
-                right: '20mm',
-                bottom: '20mm',
-                left: '20mm'
-              },
-              preferCSSPageSize: true
-            }
-          })
+    // Try using Browserless if API key is available
+    if (process.env.BROWSERLESS_API_KEY) {
+      try {
+        console.log("Attempting to use Browserless for PDF generation");
+        const browser = await puppeteer.connect({
+          browserWSEndpoint: `wss://chrome.browserless.io?token=${process.env.BROWSERLESS_API_KEY}`,
         });
         
-        if (!response.ok) {
-          throw new Error(`Browserless API error: ${response.status} ${response.statusText}`);
-        }
-        
-        pdfBuffer = Buffer.from(await response.arrayBuffer());
-        console.log("PDF generated successfully with Browserless");
-      } else {
-        // Local environment - use Puppeteer directly
-        console.log("Using local Puppeteer for PDF generation");
-        
-        const puppeteerOptions = {
-          headless: true,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--disable-software-rasterizer',
-            '--disable-extensions',
-            '--single-process',
-            '--no-zygote',
-            '--disable-web-security',
-            '--disable-features=VizDisplayCompositor'
-          ],
-          timeout: 30000
-        };
-        
-        browser = await puppeteer.launch(puppeteerOptions);
         const page = await browser.newPage();
+        await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
         
-        // Set viewport size
-        await page.setViewport({ width: 800, height: 1129 });
-        
-        // Set content with proper error handling
-        await page.setContent(htmlContent, { 
-          waitUntil: 'networkidle0',
-          timeout: 30000 
-        });
-        
-        // Generate PDF as buffer
-        pdfBuffer = await page.pdf({
+        // Generate PDF
+        await page.pdf({
+          path: filePath,
           format: 'A4',
           printBackground: true,
           margin: {
@@ -292,276 +230,69 @@ export const generateProjectPDF = async (projectData) => {
             right: '20mm',
             bottom: '20mm',
             left: '20mm'
-          },
-          preferCSSPageSize: true
+          }
         });
         
-        console.log("PDF generated successfully with Puppeteer");
-        
-        // Close browser
         await browser.close();
+        console.log("PDF generated successfully using Browserless");
+        return { filePath, fileName };
+      } catch (browserlessError) {
+        console.error("Browserless error:", browserlessError.message);
+        console.log("Falling back to local Puppeteer");
       }
-    } catch (error) {
-      console.error("Error generating PDF:", error);
-      
-      // Fallback to jsPDF with improved layout
-      console.log("Attempting fallback PDF generation with improved layout");
-      
-      const { jsPDF } = await import('jspdf');
-      const doc = new jsPDF('p', 'mm', 'a4');
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 15;
-      let yPosition = margin;
-      
-      // Helper function to calculate text height
-      const getTextHeight = (text, fontSize, maxWidth) => {
-        doc.setFontSize(fontSize);
-        const lines = doc.splitTextToSize(text, maxWidth);
-        return lines.length * (fontSize * 0.5) + 2;
-      };
-      
-      // Helper function to add wrapped text
-      const addWrappedText = (text, x, y, fontSize = 10, maxWidth = pageWidth - (2 * margin)) => {
-        doc.setFontSize(fontSize);
-        const lines = doc.splitTextToSize(text, maxWidth);
-        doc.text(lines, x, y);
-        return lines.length * (fontSize * 0.5) + 2;
-      };
-      
-      // Helper function to add colored text
-      const addColoredText = (text, x, y, color, fontSize = 10) => {
-        doc.setTextColor(color.r, color.g, color.b);
-        doc.setFontSize(fontSize);
-        doc.text(text, x, y);
-        doc.setTextColor(0, 0, 0); // Reset to black
-      };
-      
-      // Helper function to draw a table cell with proper text wrapping
-      const drawTableCell = (text, x, y, width, height, align = 'left', fontSize = 9, padding = 2) => {
-        doc.setFontSize(fontSize);
-        const availableWidth = width - (2 * padding);
-        const lines = doc.splitTextToSize(text, availableWidth);
-        const lineHeight = fontSize * 0.5;
-        const textHeight = lines.length * lineHeight;
-        const textY = y + (height / 2) - (textHeight / 2) + (fontSize * 0.2);
-        
-        if (align === 'center') {
-          doc.text(lines, x + (width / 2), textY, { align: 'center' });
-        } else if (align === 'right') {
-          doc.text(lines, x + width - padding, textY, { align: 'right' });
-        } else {
-          doc.text(lines, x + padding, textY);
-        }
-        
-        return textHeight;
-      };
-      
-      // Helper function to draw a stage card
-      const drawStageCard = (x, y, width, height, stage) => {
-        // Card border
-        doc.setDrawColor(221, 221, 221);
-        doc.rect(x, y, width, height);
-        
-        // Card background
-        doc.setFillColor(249, 249, 249);
-        doc.rect(x, y, width, height, 'F');
-        
-        // Stage name
-        doc.setFont('helvetica', 'bold', 11);
-        const stageName = stage.stage.stage_name.length > 20 ? 
-          stage.stage.stage_name.substring(0, 17) + '...' : 
-          stage.stage.stage_name;
-        doc.text(stageName, x + 3, y + 5);
-        
-        // Status badge
-        const statusColor = stage.status === 'Completed' ? {r:46, g:204, b:113} : {r:52, g:152, b:219};
-        addColoredText(stage.status, x + width - 18, y + 5, statusColor, 8);
-        
-        // Description (wrapped)
-        if (stage.stage.description) {
-          doc.setFont('helvetica', 'normal', 8);
-          const descLines = doc.splitTextToSize(stage.stage.description, width - 6);
-          doc.text(descLines, x + 3, y + 12);
-        }
-        
-        // Dates
-        doc.setFont('helvetica', 'normal', 8);
-        doc.text(`Start: ${stage.start_date ? new Date(stage.start_date).toLocaleDateString() : 'Not set'}`, x + 3, y + height - 8);
-        
-        if (stage.completion_date) {
-          doc.text(`End: ${new Date(stage.completion_date).toLocaleDateString()}`, x + 3, y + height - 4);
-        }
-      };
-      
-      // Header
-      doc.setFont('helvetica', 'bold', 20);
-      doc.text(projectData.project_name, pageWidth / 2, yPosition, { align: 'center' });
-      yPosition += 12;
-      
-      doc.setFont('helvetica', 'normal', 12);
-      doc.text('Project Details Report', pageWidth / 2, yPosition, { align: 'center' });
-      yPosition += 20;
-      
-      // Project Info
-      doc.setFont('helvetica', 'bold', 14);
-      doc.text('Project Information', margin, yPosition);
-      yPosition += 8;
-      
-      doc.setFont('helvetica', 'normal', 10);
-      yPosition += addWrappedText(`Description: ${projectData.description || 'No description provided'}`, margin, yPosition);
-      yPosition += addWrappedText(`Status: ${projectData.status}`, margin, yPosition);
-      yPosition += addWrappedText(`Created At: ${new Date(projectData.created_at).toLocaleDateString()}`, margin, yPosition);
-      yPosition += addWrappedText(`Owner: ${projectData.owner.name}`, margin, yPosition);
-      yPosition += 15;
-      
-      // Stages Section
-      if (projectData.stages && projectData.stages.length > 0) {
-        doc.setFont('helvetica', 'bold', 14);
-        doc.text('Project Stages', margin, yPosition);
-        yPosition += 10;
-        
-        // Table Header
-        const tableStart = yPosition;
-        const tableWidth = pageWidth - (2 * margin);
-        const colWidths = [0.15, 0.35, 0.15, 0.175, 0.175]; // Percentage widths
-        const headers = ['Stage Name', 'Description', 'Status', 'Start Date', 'Completion Date'];
-        
-        // Draw table header background
-        doc.setFillColor(240, 240, 240);
-        doc.rect(margin, tableStart, tableWidth, 10, 'F');
-        
-        // Draw table header text
-        doc.setFont('helvetica', 'bold', 9);
-        let xPos = margin;
-        headers.forEach((header, i) => {
-          const colWidth = tableWidth * colWidths[i];
-          drawTableCell(header, xPos, tableStart, colWidth, 10, 'center', 9);
-          xPos += colWidth;
-        });
-        
-        yPosition = tableStart + 10;
-        
-        // Table rows
-        projectData.stages.forEach(stage => {
-          if (yPosition > pageHeight - 50) {
-            doc.addPage();
-            yPosition = margin;
-          }
-          
-          // Calculate row height based on content
-          let rowHeight = 10;
-          let maxCellHeight = 10;
-          
-          // Check each cell for text height
-          const cells = [
-            { text: stage.stage.stage_name, width: tableWidth * colWidths[0] },
-            { text: stage.stage.description || 'No description', width: tableWidth * colWidths[1] },
-            { text: stage.status, width: tableWidth * colWidths[2] },
-            { text: stage.start_date ? new Date(stage.start_date).toLocaleDateString() : 'Not set', width: tableWidth * colWidths[3] },
-            { text: stage.completion_date ? new Date(stage.completion_date).toLocaleDateString() : 'Not set', width: tableWidth * colWidths[4] }
-          ];
-          
-          cells.forEach(cell => {
-            const cellHeight = getTextHeight(cell.text, 8, cell.width - 4);
-            if (cellHeight > maxCellHeight) {
-              maxCellHeight = cellHeight;
-            }
-          });
-          
-          rowHeight = Math.max(10, maxCellHeight + 4);
-          
-          // Alternate row colors
-          if ((projectData.stages.indexOf(stage) % 2) === 0) {
-            doc.setFillColor(249, 249, 249);
-            doc.rect(margin, yPosition, tableWidth, rowHeight, 'F');
-          }
-          
-          doc.setFont('helvetica', 'normal', 8);
-          let xPos = margin;
-          
-          // Draw each cell with proper text wrapping
-          cells.forEach((cell, i) => {
-            const colWidth = tableWidth * colWidths[i];
-            drawTableCell(cell.text, xPos, yPosition, colWidth, rowHeight, 'left', 8, 2);
-            xPos += colWidth;
-          });
-          
-          yPosition += rowHeight;
-        });
-        
-        yPosition += 15;
-        
-        // Stage Cards Section
-        doc.setFont('helvetica', 'bold', 14);
-        doc.text('Stage Details', margin, yPosition);
-        yPosition += 10;
-        
-        // Calculate card dimensions for 4 cards per row
-        const cardWidth = 42;
-        const cardHeight = 32;
-        const cardSpacing = 4;
-        const cardsPerRow = 4;
-        const rowWidth = (cardWidth * cardsPerRow) + (cardSpacing * (cardsPerRow - 1));
-        const startX = (pageWidth - rowWidth) / 2;
-        
-        projectData.stages.forEach((stage, index) => {
-          const row = Math.floor(index / cardsPerRow);
-          const col = index % cardsPerRow;
-          
-          const cardX = startX + (col * (cardWidth + cardSpacing));
-          const cardY = yPosition + (row * (cardHeight + cardSpacing));
-          
-          // Check if we need a new page
-          if (cardY + cardHeight > pageHeight - 30) {
-            doc.addPage();
-            yPosition = margin;
-            return; // Skip this card, it will be handled in the next iteration
-          }
-          
-          drawStageCard(cardX, cardY, cardWidth, cardHeight, stage);
-        });
-        
-        yPosition += (Math.ceil(projectData.stages.length / cardsPerRow) * (cardHeight + cardSpacing)) + 20;
-      } else {
-        doc.setFont('helvetica', 'normal', 12);
-        doc.text('No stages found', margin, yPosition);
-      }
-      
-      // Footer
-      const pageCount = doc.internal.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFont('helvetica', 'normal', 9);
-        doc.text(
-          `Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`,
-          pageWidth / 2,
-          pageHeight - 15,
-          { align: 'center' }
-        );
-        doc.text(
-          '© 2025 TaskHub Project Management System',
-          pageWidth / 2,
-          pageHeight - 10,
-          { align: 'center' }
-        );
-      }
-      
-      pdfBuffer = Buffer.from(doc.output('arraybuffer'));
-      console.log("Fallback PDF generated successfully with improved layout");
     }
     
-    // Create file path for compatibility
-    const fileName = `project-${projectData._id}-${Date.now()}.pdf`;
-    const filePath = path.join(os.tmpdir(), fileName);
-    
-    // Write buffer to file for compatibility with existing email sending logic
-    fs.writeFileSync(filePath, pdfBuffer);
+    // Fallback to local Puppeteer with better error handling
+    let browser;
+    try {
+      console.log("Using local Puppeteer for PDF generation");
+      browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu',
+          '--single-process'
+        ],
+        timeout: 60000,
+        ignoreHTTPSErrors: true,
+      });
+      
+      const page = await browser.newPage();
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 30000 });
+      
+      // Generate PDF with error handling
+      await page.pdf({
+        path: filePath,
+        format: 'A4',
+        printBackground: true,
+        margin: {
+          top: '20mm',
+          right: '20mm',
+          bottom: '20mm',
+          left: '20mm'
+        },
+        timeout: 120000,
+        preferCSSPageSize: true,
+      });
+      
+      console.log("PDF generated successfully using local Puppeteer");
+    } catch (browserError) {
+      console.error("Error with Puppeteer:", browserError.message);
+      throw new Error(`Failed to generate PDF: ${browserError.message}`);
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
+    }
     
     return {
       filePath,
-      fileName,
-      pdfBuffer
+      fileName
     };
   } catch (error) {
     console.error('Error generating PDF:', error);

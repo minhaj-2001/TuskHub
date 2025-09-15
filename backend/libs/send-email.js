@@ -1,75 +1,121 @@
-// backend/libs/send-email.js
-import nodemailer from 'nodemailer';
-import fs from 'fs';
-import dotenv from 'dotenv';
+import nodemailer from "nodemailer";
+import fs from "fs";
+import dotenv from "dotenv";
 dotenv.config();
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+// Create a transporter with better error handling and configuration
+const createTransporter = () => {
+  // Check if we have email configuration
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.warn("Email configuration not found. Email sending will be disabled.");
+    return null;
+  }
+
+  return nodemailer.createTransporter({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+    // Add these options to prevent timeouts and improve reliability
+    connectionTimeout: 10000, // 10 seconds
+    greetingTimeout: 10000, // 10 seconds
+    socketTimeout: 45000, // 45 seconds
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
+    rateLimit: true,
+    rateDelta: 200, // 200ms
+    rateLimit: 5, // max 5 messages per 200ms
+    // Add TLS options for better security
+    tls: {
+      rejectUnauthorized: true,
+      minVersion: "TLSv1.2"
+    }
+  });
+};
 
 export const sendEmail = async (to, subject, html) => {
+  const transporter = createTransporter();
+  if (!transporter) {
+    console.warn("Email transporter not available. Skipping email sending.");
+    return false;
+  }
+
   const mailOptions = {
     from: `TaskHub <${process.env.EMAIL_USER}>`,
     to,
     subject,
     html,
   };
-
+  
   try {
     const info = await transporter.sendMail(mailOptions);
     console.log('✅ Email sent:', info.response);
     return true;
   } catch (error) {
     console.error('❌ Error sending email:', error);
+    
+    // Provide more helpful error messages
+    if (error.code === 'EAUTH') {
+      console.error("Email authentication failed. Please check your email credentials and ensure that less secure app access is enabled or use an app-specific password.");
+      console.error("For Gmail accounts with 2FA, you must use an app-specific password.");
+    } else if (error.code === 'ESOCKET') {
+      console.error("Email connection failed. Please check your network connection and email service status.");
+    } else if (error.code === 'ECONNECTION') {
+      console.error("Email connection timed out. Please try again later.");
+    }
+    
     return false;
   }
 };
 
-export const sendEmailWithAttachment = async (to, subject, html, attachmentData, fileName) => {
-  let attachment;
-  
-  // Check if attachmentData is a buffer or file path
-  if (Buffer.isBuffer(attachmentData)) {
-    attachment = {
-      filename: fileName,
-      content: attachmentData,
-    };
-  } else if (typeof attachmentData === 'string' && fs.existsSync(attachmentData)) {
-    attachment = {
-      filename: fileName,
-      path: attachmentData,
-    };
-  } else {
-    console.error('❌ Invalid attachment data');
+export const sendEmailWithAttachment = async (to, subject, html, attachmentPath, fileName) => {
+  const transporter = createTransporter();
+  if (!transporter) {
+    console.warn("Email transporter not available. Skipping email sending.");
     return false;
   }
-
+  
+  // Check if attachment file exists
+  if (!fs.existsSync(attachmentPath)) {
+    console.error('❌ Attachment file not found:', attachmentPath);
+    return false;
+  }
+  
   const mailOptions = {
     from: `TaskHub <${process.env.EMAIL_USER}>`,
     to,
     subject,
     html,
-    attachments: [attachment],
+    attachments: [
+      {
+        filename: fileName,
+        path: attachmentPath,
+      },
+    ],
   };
-
+  
   try {
     const info = await transporter.sendMail(mailOptions);
     console.log('✅ Email with attachment sent:', info.response);
     return true;
   } catch (error) {
     console.error('❌ Error sending email with attachment:', error);
+    
+    // Provide more helpful error messages
+    if (error.code === 'EAUTH') {
+      console.error("Email authentication failed. Please check your email credentials and ensure that less secure app access is enabled or use an app-specific password.");
+      console.error("For Gmail accounts with 2FA, you must use an app-specific password.");
+    } else if (error.code === 'ESOCKET') {
+      console.error("Email connection failed. Please check your network connection and email service status.");
+    } else if (error.code === 'ECONNECTION') {
+      console.error("Email connection timed out. Please try again later.");
+    }
+    
     return false;
   }
 };
-
-
-
-
 
 
 
