@@ -304,174 +304,235 @@ export const generateProjectPDF = async (projectData) => {
     } catch (error) {
       console.error("Error generating PDF:", error);
       
-      // Fallback to jsPDF if all else fails
-      console.log("Attempting fallback PDF generation with jsPDF");
+      // Fallback to jsPDF with improved layout
+      console.log("Attempting fallback PDF generation with improved layout");
       
       const { jsPDF } = await import('jspdf');
       const doc = new jsPDF('p', 'mm', 'a4');
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
-      let yPosition = 20;
+      const margin = 15;
+      let yPosition = margin;
       
-      // Helper function to add text with word wrap
-      const addText = (text, x, y, fontSize = 12, maxWidth = pageWidth - 40) => {
+      // Helper function to calculate text height
+      const getTextHeight = (text, fontSize, maxWidth) => {
+        doc.setFontSize(fontSize);
+        const lines = doc.splitTextToSize(text, maxWidth);
+        return lines.length * (fontSize * 0.5) + 2;
+      };
+      
+      // Helper function to add wrapped text
+      const addWrappedText = (text, x, y, fontSize = 10, maxWidth = pageWidth - (2 * margin)) => {
         doc.setFontSize(fontSize);
         const lines = doc.splitTextToSize(text, maxWidth);
         doc.text(lines, x, y);
-        return lines.length * (fontSize * 0.5) + 5;
+        return lines.length * (fontSize * 0.5) + 2;
       };
       
       // Helper function to add colored text
-      const addColoredText = (text, x, y, color, fontSize = 12) => {
+      const addColoredText = (text, x, y, color, fontSize = 10) => {
         doc.setTextColor(color.r, color.g, color.b);
         doc.setFontSize(fontSize);
         doc.text(text, x, y);
         doc.setTextColor(0, 0, 0); // Reset to black
       };
       
-      // Header
-      doc.setFontSize(24);
-      doc.text(projectData.project_name, pageWidth / 2, yPosition, { align: 'center' });
-      yPosition += 15;
+      // Helper function to draw a table cell with proper text wrapping
+      const drawTableCell = (text, x, y, width, height, align = 'left', fontSize = 9, padding = 2) => {
+        doc.setFontSize(fontSize);
+        const availableWidth = width - (2 * padding);
+        const lines = doc.splitTextToSize(text, availableWidth);
+        const lineHeight = fontSize * 0.5;
+        const textHeight = lines.length * lineHeight;
+        const textY = y + (height / 2) - (textHeight / 2) + (fontSize * 0.2);
+        
+        if (align === 'center') {
+          doc.text(lines, x + (width / 2), textY, { align: 'center' });
+        } else if (align === 'right') {
+          doc.text(lines, x + width - padding, textY, { align: 'right' });
+        } else {
+          doc.text(lines, x + padding, textY);
+        }
+        
+        return textHeight;
+      };
       
-      doc.setFontSize(14);
+      // Helper function to draw a stage card
+      const drawStageCard = (x, y, width, height, stage) => {
+        // Card border
+        doc.setDrawColor(221, 221, 221);
+        doc.rect(x, y, width, height);
+        
+        // Card background
+        doc.setFillColor(249, 249, 249);
+        doc.rect(x, y, width, height, 'F');
+        
+        // Stage name
+        doc.setFont('helvetica', 'bold', 11);
+        const stageName = stage.stage.stage_name.length > 20 ? 
+          stage.stage.stage_name.substring(0, 17) + '...' : 
+          stage.stage.stage_name;
+        doc.text(stageName, x + 3, y + 5);
+        
+        // Status badge
+        const statusColor = stage.status === 'Completed' ? {r:46, g:204, b:113} : {r:52, g:152, b:219};
+        addColoredText(stage.status, x + width - 18, y + 5, statusColor, 8);
+        
+        // Description (wrapped)
+        if (stage.stage.description) {
+          doc.setFont('helvetica', 'normal', 8);
+          const descLines = doc.splitTextToSize(stage.stage.description, width - 6);
+          doc.text(descLines, x + 3, y + 12);
+        }
+        
+        // Dates
+        doc.setFont('helvetica', 'normal', 8);
+        doc.text(`Start: ${stage.start_date ? new Date(stage.start_date).toLocaleDateString() : 'Not set'}`, x + 3, y + height - 8);
+        
+        if (stage.completion_date) {
+          doc.text(`End: ${new Date(stage.completion_date).toLocaleDateString()}`, x + 3, y + height - 4);
+        }
+      };
+      
+      // Header
+      doc.setFont('helvetica', 'bold', 20);
+      doc.text(projectData.project_name, pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 12;
+      
+      doc.setFont('helvetica', 'normal', 12);
       doc.text('Project Details Report', pageWidth / 2, yPosition, { align: 'center' });
       yPosition += 20;
       
       // Project Info
-      doc.setFontSize(16);
-      doc.text('Project Information', 20, yPosition);
-      yPosition += 10;
+      doc.setFont('helvetica', 'bold', 14);
+      doc.text('Project Information', margin, yPosition);
+      yPosition += 8;
       
-      doc.setFontSize(12);
-      yPosition += addText(`Description: ${projectData.description || 'No description provided'}`, 20, yPosition);
-      yPosition += addText(`Status: ${projectData.status}`, 20, yPosition);
-      yPosition += addText(`Created At: ${new Date(projectData.created_at).toLocaleDateString()}`, 20, yPosition);
-      yPosition += addText(`Owner: ${projectData.owner.name}`, 20, yPosition);
-      yPosition += 20;
+      doc.setFont('helvetica', 'normal', 10);
+      yPosition += addWrappedText(`Description: ${projectData.description || 'No description provided'}`, margin, yPosition);
+      yPosition += addWrappedText(`Status: ${projectData.status}`, margin, yPosition);
+      yPosition += addWrappedText(`Created At: ${new Date(projectData.created_at).toLocaleDateString()}`, margin, yPosition);
+      yPosition += addWrappedText(`Owner: ${projectData.owner.name}`, margin, yPosition);
+      yPosition += 15;
       
       // Stages Section
       if (projectData.stages && projectData.stages.length > 0) {
-        doc.setFontSize(16);
-        doc.text('Project Stages', 20, yPosition);
-        yPosition += 15;
+        doc.setFont('helvetica', 'bold', 14);
+        doc.text('Project Stages', margin, yPosition);
+        yPosition += 10;
         
         // Table Header
         const tableStart = yPosition;
-        const cellHeight = 8;
-        const colWidths = [40, 60, 30, 30, 30];
+        const tableWidth = pageWidth - (2 * margin);
+        const colWidths = [0.15, 0.35, 0.15, 0.175, 0.175]; // Percentage widths
         const headers = ['Stage Name', 'Description', 'Status', 'Start Date', 'Completion Date'];
         
-        // Draw table header
+        // Draw table header background
         doc.setFillColor(240, 240, 240);
-        doc.rect(20, tableStart, pageWidth - 40, cellHeight, 'F');
+        doc.rect(margin, tableStart, tableWidth, 10, 'F');
         
-        doc.setFontSize(10);
-        let xPos = 20;
+        // Draw table header text
+        doc.setFont('helvetica', 'bold', 9);
+        let xPos = margin;
         headers.forEach((header, i) => {
-          doc.text(header, xPos, tableStart + cellHeight / 2 + 2);
-          xPos += colWidths[i];
+          const colWidth = tableWidth * colWidths[i];
+          drawTableCell(header, xPos, tableStart, colWidth, 10, 'center', 9);
+          xPos += colWidth;
         });
         
-        yPosition = tableStart + cellHeight;
+        yPosition = tableStart + 10;
         
         // Table rows
         projectData.stages.forEach(stage => {
-          if (yPosition > pageHeight - 30) {
+          if (yPosition > pageHeight - 50) {
             doc.addPage();
-            yPosition = 20;
+            yPosition = margin;
           }
+          
+          // Calculate row height based on content
+          let rowHeight = 10;
+          let maxCellHeight = 10;
+          
+          // Check each cell for text height
+          const cells = [
+            { text: stage.stage.stage_name, width: tableWidth * colWidths[0] },
+            { text: stage.stage.description || 'No description', width: tableWidth * colWidths[1] },
+            { text: stage.status, width: tableWidth * colWidths[2] },
+            { text: stage.start_date ? new Date(stage.start_date).toLocaleDateString() : 'Not set', width: tableWidth * colWidths[3] },
+            { text: stage.completion_date ? new Date(stage.completion_date).toLocaleDateString() : 'Not set', width: tableWidth * colWidths[4] }
+          ];
+          
+          cells.forEach(cell => {
+            const cellHeight = getTextHeight(cell.text, 8, cell.width - 4);
+            if (cellHeight > maxCellHeight) {
+              maxCellHeight = cellHeight;
+            }
+          });
+          
+          rowHeight = Math.max(10, maxCellHeight + 4);
           
           // Alternate row colors
           if ((projectData.stages.indexOf(stage) % 2) === 0) {
             doc.setFillColor(249, 249, 249);
-            doc.rect(20, yPosition, pageWidth - 40, cellHeight, 'F');
+            doc.rect(margin, yPosition, tableWidth, rowHeight, 'F');
           }
           
-          doc.setFontSize(9);
-          xPos = 20;
+          doc.setFont('helvetica', 'normal', 8);
+          let xPos = margin;
           
-          // Stage Name
-          const stageNameLines = doc.splitTextToSize(stage.stage.stage_name, colWidths[0]);
-          doc.text(stageNameLines, xPos, yPosition + cellHeight / 2 + 2);
-          xPos += colWidths[0];
+          // Draw each cell with proper text wrapping
+          cells.forEach((cell, i) => {
+            const colWidth = tableWidth * colWidths[i];
+            drawTableCell(cell.text, xPos, yPosition, colWidth, rowHeight, 'left', 8, 2);
+            xPos += colWidth;
+          });
           
-          // Description
-          const descLines = doc.splitTextToSize(stage.stage.description || 'No description', colWidths[1]);
-          doc.text(descLines, xPos, yPosition + cellHeight / 2 + 2);
-          xPos += colWidths[1];
-          
-          // Status
-          const statusColor = stage.status === 'Completed' ? {r:46, g:204, b:113} : {r:52, g:152, b:219};
-          addColoredText(stage.status, xPos, yPosition + cellHeight / 2 + 2, statusColor, 9);
-          xPos += colWidths[2];
-          
-          // Start Date
-          doc.text(stage.start_date ? new Date(stage.start_date).toLocaleDateString() : 'Not set', 
-                   xPos, yPosition + cellHeight / 2 + 2);
-          xPos += colWidths[3];
-          
-          // Completion Date
-          doc.text(stage.completion_date ? new Date(stage.completion_date).toLocaleDateString() : 'Not set', 
-                   xPos, yPosition + cellHeight / 2 + 2);
-          
-          yPosition += cellHeight;
+          yPosition += rowHeight;
         });
         
         yPosition += 15;
         
-        // Card View Section
-        doc.setFontSize(16);
-        doc.text('Stage Details', 20, yPosition);
-        yPosition += 15;
+        // Stage Cards Section
+        doc.setFont('helvetica', 'bold', 14);
+        doc.text('Stage Details', margin, yPosition);
+        yPosition += 10;
         
-        projectData.stages.forEach(stage => {
-          if (yPosition > pageHeight - 50) {
+        // Calculate card dimensions for 4 cards per row
+        const cardWidth = 42;
+        const cardHeight = 32;
+        const cardSpacing = 4;
+        const cardsPerRow = 4;
+        const rowWidth = (cardWidth * cardsPerRow) + (cardSpacing * (cardsPerRow - 1));
+        const startX = (pageWidth - rowWidth) / 2;
+        
+        projectData.stages.forEach((stage, index) => {
+          const row = Math.floor(index / cardsPerRow);
+          const col = index % cardsPerRow;
+          
+          const cardX = startX + (col * (cardWidth + cardSpacing));
+          const cardY = yPosition + (row * (cardHeight + cardSpacing));
+          
+          // Check if we need a new page
+          if (cardY + cardHeight > pageHeight - 30) {
             doc.addPage();
-            yPosition = 20;
+            yPosition = margin;
+            return; // Skip this card, it will be handled in the next iteration
           }
           
-          // Card border
-          doc.setDrawColor(221, 221, 221);
-          doc.rect(20, yPosition, pageWidth - 40, 30);
-          
-          // Stage name and status
-          doc.setFontSize(12);
-          doc.text(stage.stage.stage_name, 25, yPosition + 10);
-          
-          const statusColor = stage.status === 'Completed' ? {r:46, g:204, b:113} : {r:52, g:152, b:219};
-          addColoredText(stage.status, pageWidth - 60, yPosition + 10, statusColor, 10);
-          
-          // Description
-          if (stage.stage.description) {
-            doc.setFontSize(10);
-            yPosition += addText(stage.stage.description, 25, yPosition + 20, 10, pageWidth - 70);
-          }
-          
-          // Dates
-          doc.setFontSize(9);
-          doc.text(`Start Date: ${stage.start_date ? new Date(stage.start_date).toLocaleDateString() : 'Not set'}`, 
-                   25, yPosition);
-          yPosition += 5;
-          
-          if (stage.completion_date) {
-            doc.text(`Completion Date: ${new Date(stage.completion_date).toLocaleDateString()}`, 
-                     25, yPosition);
-            yPosition += 5;
-          }
-          
-          yPosition += 10;
+          drawStageCard(cardX, cardY, cardWidth, cardHeight, stage);
         });
+        
+        yPosition += (Math.ceil(projectData.stages.length / cardsPerRow) * (cardHeight + cardSpacing)) + 20;
       } else {
-        doc.setFontSize(12);
-        doc.text('No stages found', 20, yPosition);
+        doc.setFont('helvetica', 'normal', 12);
+        doc.text('No stages found', margin, yPosition);
       }
       
       // Footer
       const pageCount = doc.internal.getNumberOfPages();
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
-        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal', 9);
         doc.text(
           `Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`,
           pageWidth / 2,
@@ -487,7 +548,7 @@ export const generateProjectPDF = async (projectData) => {
       }
       
       pdfBuffer = Buffer.from(doc.output('arraybuffer'));
-      console.log("Fallback PDF generated successfully");
+      console.log("Fallback PDF generated successfully with improved layout");
     }
     
     // Create file path for compatibility

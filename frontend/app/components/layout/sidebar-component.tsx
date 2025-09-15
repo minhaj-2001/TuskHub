@@ -71,12 +71,13 @@ export const SidebarComponent = () => {
         title: "User Profile",
         href: "/user/profile",
         icon: Users,
-      },
-      {
-        title: "Settings",
-        href: "/settings",
-        icon: Settings,
       }
+      // ,
+      // {
+      //   title: "Settings",
+      //   href: "/settings",
+      //   icon: Settings,
+      // }
     );
     
     return baseItems;
